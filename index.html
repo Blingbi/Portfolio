@@ -107,38 +107,53 @@ scanInput.addEventListener("keydown", function(e) {
 function processScan(scan) {
 
     /*
-    EXPECTED DATA EXAMPLES:
-    4133965 H052Q3P059 525
-    OR
-    4133965|H052Q3P059|525
+    EXAMPLE INPUT:
+
+    ~LBL;010004133965;10H052PB4104;3103227000;11;17
+
+    WHAT WE WANT:
+    GMID = 4133965
+    Batch = H052PB4104
+    Weight = 227
     */
 
     let gmid = "";
     let batch = "";
     let weight = 0;
 
-    // Replace separators with spaces
-    let cleaned = scan.replace(/\|/g, " ");
+    const parts = scan.split(";");
 
-    // Split into chunks
-    let parts = cleaned.split(/\s+/);
-
-    // Find GMID (7 digit number)
     for (let part of parts) {
 
-        if (/^\d{7}$/.test(part)) {
-            gmid = part;
+        // GMID section
+        // 010004133965
+        if (part.startsWith("0100")) {
+
+            // pull last 7 digits
+            gmid = part.slice(-7);
         }
 
-        // Batch pattern example:
-        // H052Q3P059
-        if (/^[A-Z]\d{3}[A-Z]\d[A-Z]\d{3}$/i.test(part)) {
-            batch = part.toUpperCase();
+        // Batch section
+        // 10H052PB4104
+        else if (part.startsWith("10")) {
+
+            batch = part.substring(2);
         }
 
-        // Weight
-        if (/^\d+(\.\d+)?$/.test(part) && part !== gmid) {
-            weight = parseFloat(part);
+        // Weight section
+        // 3103227000
+        else if (part.startsWith("3103")) {
+
+            /*
+            GS1 AI 3103 means:
+            weight with 3 decimal places
+
+            227000 -> 227.000
+            */
+
+            let rawWeight = part.substring(4);
+
+            weight = parseInt(rawWeight) / 1000;
         }
     }
 
@@ -168,7 +183,7 @@ function processScan(scan) {
     renderSummary();
 
     statusDiv.innerText =
-        `Scanned GMID ${gmid} | Batch ${batch}`;
+        `Scanned GMID ${gmid} | Batch ${batch} | Weight ${weight}`;
 }
 
 function renderSummary() {
@@ -185,7 +200,7 @@ function renderSummary() {
         row.insertCell(1).innerText = item.batch;
         row.insertCell(2).innerText = item.qty;
         row.insertCell(3).innerText =
-            item.totalWeight.toFixed(2);
+            item.totalWeight.toFixed(3);
     }
 }
 
@@ -199,7 +214,7 @@ function exportCSV() {
         let item = data[key];
 
         csv +=
-            `${item.gmid},${item.batch},${item.qty},${item.totalWeight.toFixed(2)}\n`;
+            `${item.gmid},${item.batch},${item.qty},${item.totalWeight.toFixed(3)}\n`;
     }
 
     const blob =
