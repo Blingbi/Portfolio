@@ -14,7 +14,7 @@
     }
 
     h1 {
-        margin-bottom: 20px;
+        margin-bottom: 15px;
     }
 
     input {
@@ -30,6 +30,7 @@
         font-size: 16px;
         margin-right: 10px;
         cursor: pointer;
+        margin-bottom: 10px;
     }
 
     table {
@@ -50,7 +51,7 @@
     }
 
     .status {
-        margin-top: 15px;
+        margin-top: 10px;
         font-weight: bold;
     }
 </style>
@@ -60,8 +61,10 @@
 
 <h1>Trailer Scan System</h1>
 
-<label><strong>Scan Data Matrix Barcode</strong></label>
+<label><strong>Scan Data Matrix</strong></label>
 <input type="text" id="scanInput" autofocus placeholder="Scan barcode here">
+
+<br>
 
 <button onclick="exportCSV()">Export Summary CSV</button>
 <button onclick="resetData()">RESET ALL DATA</button>
@@ -88,90 +91,83 @@ const statusDiv = document.getElementById("status");
 
 let data = {};
 
-scanInput.addEventListener("keydown", function(e) {
+// ------------------------------
+// SCAN BUFFER (IMPORTANT FIX)
+// ------------------------------
+let scanBuffer = "";
+let scanTimer = null;
 
-    if (e.key === "Enter") {
+scanInput.addEventListener("input", function () {
 
-        e.preventDefault();
+    scanBuffer = scanInput.value;
 
-        const scan = scanInput.value.trim();
+    clearTimeout(scanTimer);
 
-        if (!scan) return;
+    scanTimer = setTimeout(() => {
 
-        processScan(scan);
+        if (scanBuffer && scanBuffer.length > 10) {
+            processScan(scanBuffer.trim());
+        }
 
         scanInput.value = "";
-    }
+        scanBuffer = "";
+
+    }, 120); // small delay to collect full scan
 });
 
+// ------------------------------
+// MAIN PARSER
+// ------------------------------
 function processScan(scan) {
-
-    /*
-    EXAMPLE INPUT:
-
-    ~LBL;010004133965;10H052PB4104;3103227000;11;17
-
-    WHAT WE WANT:
-    GMID = 4133965
-    Batch = H052PB4104
-    Weight = 227
-    */
 
     let gmid = "";
     let batch = "";
     let weight = 0;
 
+    /*
+      YOUR REAL FORMAT:
+      ~LBL;010004133965;10H052PB4104;3103227000;11;17
+
+      WE NEED:
+      GMID = 4133965
+      BATCH = H052PB4104
+      WEIGHT = 227.000
+    */
+
     const parts = scan.split(";");
 
     for (let part of parts) {
 
-        // GMID section
-        // 010004133965
+        // GMID (0100 + 7-digit embedded)
         if (part.startsWith("0100")) {
-
-            // pull last 7 digits
             gmid = part.slice(-7);
         }
 
-        // Batch section
-        // 10H052PB4104
-        else if (part.startsWith("10")) {
-
+        // Batch (10 + code)
+        else if (part.startsWith("10") && part.length > 2) {
             batch = part.substring(2);
         }
 
-        // Weight section
-        // 3103227000
+        // Weight (GS1 3103 format)
         else if (part.startsWith("3103")) {
 
-            /*
-            GS1 AI 3103 means:
-            weight with 3 decimal places
+            let raw = part.substring(4);
 
-            227000 -> 227.000
-            */
-
-            let rawWeight = part.substring(4);
-
-            weight = parseInt(rawWeight) / 1000;
+            weight = parseInt(raw) / 1000;
         }
     }
 
     if (!gmid || !batch || !weight) {
-
-        statusDiv.innerText =
-            "Could not parse barcode data";
-
+        statusDiv.innerText = "❌ Parse failed - check barcode format";
         return;
     }
 
     const key = gmid + "|" + batch;
 
     if (!data[key]) {
-
         data[key] = {
-            gmid: gmid,
-            batch: batch,
+            gmid,
+            batch,
             qty: 0,
             totalWeight: 0
         };
@@ -183,9 +179,12 @@ function processScan(scan) {
     renderSummary();
 
     statusDiv.innerText =
-        `Scanned GMID ${gmid} | Batch ${batch} | Weight ${weight}`;
+        `✔ GMID ${gmid} | Batch ${batch} | Weight ${weight.toFixed(3)}`;
 }
 
+// ------------------------------
+// SUMMARY TABLE
+// ------------------------------
 function renderSummary() {
 
     summaryTable.innerHTML = "";
@@ -199,39 +198,36 @@ function renderSummary() {
         row.insertCell(0).innerText = item.gmid;
         row.insertCell(1).innerText = item.batch;
         row.insertCell(2).innerText = item.qty;
-        row.insertCell(3).innerText =
-            item.totalWeight.toFixed(3);
+        row.insertCell(3).innerText = item.totalWeight.toFixed(3);
     }
 }
 
+// ------------------------------
+// EXPORT ONLY SUMMARY
+// ------------------------------
 function exportCSV() {
 
-    let csv =
-        "GMID,Batch,DrumQty,TotalWeight\n";
+    let csv = "GMID,Batch,DrumQty,TotalWeight\n";
 
     for (let key in data) {
 
         let item = data[key];
 
-        csv +=
-            `${item.gmid},${item.batch},${item.qty},${item.totalWeight.toFixed(3)}\n`;
+        csv += `${item.gmid},${item.batch},${item.qty},${item.totalWeight.toFixed(3)}\n`;
     }
 
-    const blob =
-        new Blob([csv], { type: "text/csv" });
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
 
-    const url =
-        URL.createObjectURL(blob);
-
-    const a =
-        document.createElement("a");
-
+    const a = document.createElement("a");
     a.href = url;
     a.download = "trailer_summary.csv";
-
     a.click();
 }
 
+// ------------------------------
+// RESET BUTTON
+// ------------------------------
 function resetData() {
 
     if (confirm("Clear all scanned data?")) {
@@ -240,8 +236,7 @@ function resetData() {
 
         summaryTable.innerHTML = "";
 
-        statusDiv.innerText =
-            "All scan data cleared";
+        statusDiv.innerText = "✔ Reset complete";
     }
 }
 
