@@ -4,33 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Trailer Scan System</title>
+<title>Live Warehouse Scan System</title>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
 <style>
     body {
-        font-family: Arial, sans-serif;
+        font-family: Arial;
         padding: 20px;
-        background-color: #f5f5f5;
-    }
-
-    h1 {
-        margin-bottom: 15px;
+        background: #f5f5f5;
     }
 
     input {
         width: 100%;
         padding: 15px;
         font-size: 22px;
+        margin-bottom: 10px;
         box-sizing: border-box;
-        margin-bottom: 15px;
     }
 
     button {
-        padding: 12px 18px;
-        font-size: 16px;
+        padding: 10px 15px;
         margin-right: 10px;
-        cursor: pointer;
         margin-bottom: 10px;
+        cursor: pointer;
     }
 
     table {
@@ -42,12 +40,11 @@
 
     th, td {
         border: 1px solid #ccc;
-        padding: 10px;
-        text-align: left;
+        padding: 8px;
     }
 
     th {
-        background-color: #eaeaea;
+        background: #eee;
     }
 
     .status {
@@ -59,15 +56,11 @@
 
 <body>
 
-<h1>Trailer Scan System</h1>
+<h2>LIVE Warehouse Scan System</h2>
 
-<label><strong>Scan Data Matrix</strong></label>
-<input type="text" id="scanInput" autofocus placeholder="Scan barcode here">
+<input id="scanInput" placeholder="Scan Data Matrix..." autofocus>
 
-<br>
-
-<button onclick="exportCSV()">Export Summary CSV</button>
-<button onclick="resetData()">RESET ALL DATA</button>
+<button onclick="resetAll()">RESET ALL DATA</button>
 
 <div class="status" id="status"></div>
 
@@ -80,164 +73,155 @@
             <th>Total Weight</th>
         </tr>
     </thead>
-    <tbody id="summaryTable"></tbody>
+    <tbody id="table"></tbody>
 </table>
 
 <script>
 
-const scanInput = document.getElementById("scanInput");
-const summaryTable = document.getElementById("summaryTable");
-const statusDiv = document.getElementById("status");
+// 🔥 YOUR FIREBASE CONFIG
+const firebaseConfig = {
+  apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
+  authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
+  databaseURL: "https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com",
+  projectId: "warehouse-scanner-1b6bc",
+  storageBucket: "warehouse-scanner-1b6bc.appspot.com",
+  messagingSenderId: "347483666604",
+  appId: "1:347483666604:web:cc30686d262c0e3376c709"
+};
 
-let data = {};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-// ------------------------------
-// SCAN BUFFER (IMPORTANT FIX)
-// ------------------------------
-let scanBuffer = "";
-let scanTimer = null;
+const input = document.getElementById("scanInput");
+const table = document.getElementById("table");
+const status = document.getElementById("status");
 
-scanInput.addEventListener("input", function () {
+let buffer = "";
+let timer = null;
 
-    scanBuffer = scanInput.value;
+/* ---------------------------
+   LIVE DATABASE LISTENER
+---------------------------- */
+db.ref("scans").on("value", snap => {
 
-    clearTimeout(scanTimer);
+    const data = snap.val() || {};
 
-    scanTimer = setTimeout(() => {
+    const summary = {};
 
-        if (scanBuffer && scanBuffer.length > 10) {
-            processScan(scanBuffer.trim());
+    Object.values(data).forEach(item => {
+
+        const key = item.gmid + "|" + item.batch;
+
+        if (!summary[key]) {
+            summary[key] = {
+                gmid: item.gmid,
+                batch: item.batch,
+                qty: 0,
+                weight: 0
+            };
         }
 
-        scanInput.value = "";
-        scanBuffer = "";
+        summary[key].qty += 1;
+        summary[key].weight += item.weight;
+    });
 
-    }, 120); // small delay to collect full scan
+    render(summary);
 });
 
-// ------------------------------
-// MAIN PARSER
-// ------------------------------
+/* ---------------------------
+   SCANNER INPUT HANDLING
+---------------------------- */
+input.addEventListener("input", () => {
+
+    buffer = input.value;
+
+    clearTimeout(timer);
+
+    timer = setTimeout(() => {
+
+        if (buffer.length > 10) {
+            processScan(buffer);
+        }
+
+        input.value = "";
+        buffer = "";
+
+    }, 120);
+});
+
+/* ---------------------------
+   PARSE YOUR DATA MATRIX
+   Example:
+   ~LBL;010004133965;10H052PB4104;3103227000;11;17
+---------------------------- */
 function processScan(scan) {
 
     let gmid = "";
     let batch = "";
     let weight = 0;
 
-    /*
-      YOUR REAL FORMAT:
-      ~LBL;010004133965;10H052PB4104;3103227000;11;17
-
-      WE NEED:
-      GMID = 4133965
-      BATCH = H052PB4104
-      WEIGHT = 227.000
-    */
-
     const parts = scan.split(";");
 
-    for (let part of parts) {
+    for (let p of parts) {
 
-        // GMID (0100 + 7-digit embedded)
-        if (part.startsWith("0100")) {
-            gmid = part.slice(-7);
+        // GMID = last 7 digits of 0100... field
+        if (p.startsWith("0100")) {
+            gmid = p.slice(-7);
         }
 
-        // Batch (10 + code)
-        else if (part.startsWith("10") && part.length > 2) {
-            batch = part.substring(2);
+        // Batch = remove "10" prefix
+        else if (p.startsWith("10")) {
+            batch = p.substring(2);
         }
 
-        // Weight (GS1 3103 format)
-        else if (part.startsWith("3103")) {
-
-            let raw = part.substring(4);
-
-            weight = parseInt(raw) / 1000;
+        // Weight = GS1 3103 format
+        else if (p.startsWith("3103")) {
+            weight = parseInt(p.substring(4)) / 1000;
         }
     }
 
     if (!gmid || !batch || !weight) {
-        statusDiv.innerText = "❌ Parse failed - check barcode format";
+        status.innerText = "❌ Parse failed";
         return;
     }
 
-    const key = gmid + "|" + batch;
+    // PUSH TO FIREBASE (LIVE SHARED SYSTEM)
+    db.ref("scans").push({
+        gmid,
+        batch,
+        weight,
+        time: Date.now(),
+        device: "FORKLIFT"
+    });
 
-    if (!data[key]) {
-        data[key] = {
-            gmid,
-            batch,
-            qty: 0,
-            totalWeight: 0
-        };
-    }
-
-    data[key].qty += 1;
-    data[key].totalWeight += weight;
-
-    renderSummary();
-
-    statusDiv.innerText =
-        `✔ GMID ${gmid} | Batch ${batch} | Weight ${weight.toFixed(3)}`;
+    status.innerText =
+        `✔ Sent GMID ${gmid} | Batch ${batch} | ${weight}`;
 }
 
-// ------------------------------
-// SUMMARY TABLE
-// ------------------------------
-function renderSummary() {
+/* ---------------------------
+   RENDER SUMMARY TABLE
+---------------------------- */
+function render(summary) {
 
-    summaryTable.innerHTML = "";
+    table.innerHTML = "";
 
-    for (let key in data) {
+    Object.values(summary).forEach(item => {
 
-        let item = data[key];
-
-        const row = summaryTable.insertRow();
+        const row = table.insertRow();
 
         row.insertCell(0).innerText = item.gmid;
         row.insertCell(1).innerText = item.batch;
         row.insertCell(2).innerText = item.qty;
-        row.insertCell(3).innerText = item.totalWeight.toFixed(3);
-    }
+        row.insertCell(3).innerText = item.weight.toFixed(3);
+    });
 }
 
-// ------------------------------
-// EXPORT ONLY SUMMARY
-// ------------------------------
-function exportCSV() {
-
-    let csv = "GMID,Batch,DrumQty,TotalWeight\n";
-
-    for (let key in data) {
-
-        let item = data[key];
-
-        csv += `${item.gmid},${item.batch},${item.qty},${item.totalWeight.toFixed(3)}\n`;
-    }
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "trailer_summary.csv";
-    a.click();
-}
-
-// ------------------------------
-// RESET BUTTON
-// ------------------------------
-function resetData() {
-
-    if (confirm("Clear all scanned data?")) {
-
-        data = {};
-
-        summaryTable.innerHTML = "";
-
-        statusDiv.innerText = "✔ Reset complete";
-    }
+/* ---------------------------
+   RESET ALL DATA
+---------------------------- */
+function resetAll() {
+    db.ref("scans").remove();
+    status.innerText = "✔ All data cleared";
 }
 
 </script>
