@@ -60,6 +60,7 @@
 
 <input id="scanInput" placeholder="Scan Data Matrix..." autofocus>
 
+<button onclick="exportCSV()">EXPORT CSV</button>
 <button onclick="resetAll()">RESET ALL DATA</button>
 
 <div class="status" id="status"></div>
@@ -78,7 +79,7 @@
 
 <script>
 
-// 🔥 YOUR FIREBASE CONFIG
+// 🔥 FIREBASE CONFIG (yours)
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -100,7 +101,7 @@ let buffer = "";
 let timer = null;
 
 /* ---------------------------
-   LIVE DATABASE LISTENER
+   LIVE FIREBASE LISTENER
 ---------------------------- */
 db.ref("scans").on("value", snap => {
 
@@ -129,7 +130,7 @@ db.ref("scans").on("value", snap => {
 });
 
 /* ---------------------------
-   SCANNER INPUT HANDLING
+   SCAN INPUT HANDLING
 ---------------------------- */
 input.addEventListener("input", () => {
 
@@ -150,9 +151,7 @@ input.addEventListener("input", () => {
 });
 
 /* ---------------------------
-   PARSE YOUR DATA MATRIX
-   Example:
-   ~LBL;010004133965;10H052PB4104;3103227000;11;17
+   PARSE DATA MATRIX
 ---------------------------- */
 function processScan(scan) {
 
@@ -164,17 +163,17 @@ function processScan(scan) {
 
     for (let p of parts) {
 
-        // GMID = last 7 digits of 0100... field
+        // GMID (0100 + 7 digits)
         if (p.startsWith("0100")) {
             gmid = p.slice(-7);
         }
 
-        // Batch = remove "10" prefix
+        // Batch (10 + code)
         else if (p.startsWith("10")) {
             batch = p.substring(2);
         }
 
-        // Weight = GS1 3103 format
+        // Weight (3103 GS1 format)
         else if (p.startsWith("3103")) {
             weight = parseInt(p.substring(4)) / 1000;
         }
@@ -185,7 +184,6 @@ function processScan(scan) {
         return;
     }
 
-    // PUSH TO FIREBASE (LIVE SHARED SYSTEM)
     db.ref("scans").push({
         gmid,
         batch,
@@ -199,7 +197,7 @@ function processScan(scan) {
 }
 
 /* ---------------------------
-   RENDER SUMMARY TABLE
+   RENDER TABLE
 ---------------------------- */
 function render(summary) {
 
@@ -213,6 +211,54 @@ function render(summary) {
         row.insertCell(1).innerText = item.batch;
         row.insertCell(2).innerText = item.qty;
         row.insertCell(3).innerText = item.weight.toFixed(3);
+    });
+}
+
+/* ---------------------------
+   EXPORT CSV (LIVE SUMMARY)
+---------------------------- */
+function exportCSV() {
+
+    db.ref("scans").once("value").then(snapshot => {
+
+        const data = snapshot.val() || {};
+
+        const summary = {};
+
+        Object.values(data).forEach(item => {
+
+            const key = item.gmid + "|" + item.batch;
+
+            if (!summary[key]) {
+                summary[key] = {
+                    gmid: item.gmid,
+                    batch: item.batch,
+                    qty: 0,
+                    weight: 0
+                };
+            }
+
+            summary[key].qty += 1;
+            summary[key].weight += item.weight;
+        });
+
+        let csv = "GMID,Batch,DrumQty,TotalWeight\n";
+
+        Object.values(summary).forEach(item => {
+
+            csv += `${item.gmid},${item.batch},${item.qty},${item.weight.toFixed(3)}\n`;
+        });
+
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "warehouse_summary.csv";
+        a.click();
+
+        status.innerText = "✔ CSV exported";
+
     });
 }
 
