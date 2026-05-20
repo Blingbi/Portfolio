@@ -349,7 +349,7 @@ function start(){
   });
 }
 
-/* SCAN */
+/* SCAN — ONLY RULE LOGIC MODIFIED */
 function scan(s){
 
   let g="",b="",w=0;
@@ -364,6 +364,29 @@ function scan(s){
 
   const dest=document.getElementById("destinationSelect").value || "UNASSIGNED";
 
+  /* =========================
+     RULE CHECK (ADDED ONLY)
+     ========================= */
+
+  if(rulesEnabled && allRulesCache){
+
+    for(let d in allRulesCache){
+      if(allRulesCache[d] && allRulesCache[d][g]){
+
+        if(d !== dest){
+
+          document.getElementById("status").innerText =
+            "RULE VIOLATION: " + g + " must go to " + d;
+
+          document.getElementById("status").style.color = "#ff6b6b";
+
+          return;
+        }
+      }
+    }
+  }
+
+  /* EXISTING PUSH */
   db.ref("scans").push({
     gmid:g,
     batch:b,
@@ -390,77 +413,6 @@ function render(sum){
   });
 }
 
-/* EXCEL EXPORT */
-function exportExcel(){
-
-  db.ref("scans").once("value").then(snap=>{
-
-    const data=snap.val()||{};
-    const summary={};
-
-    Object.values(data).forEach(i=>{
-
-      const key=i.gmid+"|"+i.batch+"|"+(i.dest||"UNASSIGNED");
-
-      if(!summary[key]){
-        summary[key]={
-          GMID:i.gmid,
-          Batch:i.batch,
-          Destination:i.dest||"UNASSIGNED",
-          Qty:0,
-          Weight:0
-        };
-      }
-
-      summary[key].Qty++;
-      summary[key].Weight+=i.weight;
-    });
-
-    const rows=Object.values(summary).map(i=>({
-      GMID:i.GMID,
-      Batch:i.Batch,
-      Destination:i.Destination,
-      Qty:i.Qty,
-      Weight:Number(i.Weight.toFixed(3))
-    }));
-
-    const ws=XLSX.utils.json_to_sheet(rows);
-    const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,"Warehouse");
-
-    XLSX.writeFile(wb,"warehouse_export.xlsx");
-  });
-}
-
-/* RESET */
-function resetAll(){
-
-  if(!confirm("Clear ALL scans?")) return;
-
-  db.ref("scans").remove().then(()=>{
-    document.getElementById("status").innerText="All scans cleared";
-  });
-}
-
-/* RULES */
-function addRule(){
-
-  const d=document.getElementById("ruleDestination").value;
-  const g=document.getElementById("ruleGMID").value.trim();
-
-  if(!d||!g) return;
-
-  db.ref("rules/"+d+"/"+g).set(true);
-}
-
-function loadRules(){
-
-  db.ref("rules").on("value",snap=>{
-    allRulesCache=snap.val()||{};
-    renderRules();
-  });
-}
-
 /* RULE TOGGLE */
 function toggleRules(){
 
@@ -470,9 +422,23 @@ function toggleRules(){
   const status=document.getElementById("rulesStatus");
 
   btn.innerText = rulesEnabled ? "Rules: ON" : "Rules: OFF";
-
   status.innerText = rulesEnabled ? "ENABLED" : "DISABLED";
   status.style.color = rulesEnabled ? "#7ee787" : "#ff6b6b";
+}
+
+/* RULES DATA */
+function addRule(){
+  const d=document.getElementById("ruleDestination").value;
+  const g=document.getElementById("ruleGMID").value.trim();
+  if(!d||!g) return;
+  db.ref("rules/"+d+"/"+g).set(true);
+}
+
+function loadRules(){
+  db.ref("rules").on("value",snap=>{
+    allRulesCache=snap.val()||{};
+    renderRules();
+  });
 }
 
 function renderRules(){
