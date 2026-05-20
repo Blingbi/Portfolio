@@ -7,63 +7,84 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
-body {
-  font-family: Arial;
-  background: #0b0f14;
-  color: #d7e1ea;
-  padding: 20px;
+
+body{
+  font-family:Arial;
+  background:#0b0f14;
+  color:#d7e1ea;
+  padding:20px;
 }
 
-#app, #loginBox {
-  background: #121a22;
-  padding: 15px;
-  border-radius: 8px;
-  border: 1px solid #1f2a36;
+#app,#loginBox{
+  background:#121a22;
+  padding:15px;
+  border-radius:8px;
+  border:1px solid #1f2a36;
 }
 
-input {
-  width: 100%;
-  padding: 10px;
-  margin: 5px 0;
-  background: #0f151c;
-  color: #fff;
-  border: 1px solid #263241;
+input,select{
+  width:100%;
+  padding:10px;
+  margin:5px 0;
+  background:#0f151c;
+  color:white;
+  border:1px solid #263241;
 }
 
-button {
-  margin-top: 8px;
-  padding: 10px;
-  background: #1f6feb;
-  border: none;
-  color: white;
-  cursor: pointer;
+button{
+  padding:10px;
+  margin-top:8px;
+  background:#1f6feb;
+  border:none;
+  color:white;
+  cursor:pointer;
 }
 
-.status {
-  margin-top: 10px;
-  font-weight: bold;
-  color: #7ee787;
+button:hover{
+  background:#2b7fff;
 }
 
-table {
-  width: 100%;
-  margin-top: 10px;
-  border-collapse: collapse;
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:10px;
 }
 
-td, th {
-  border: 1px solid #223040;
-  padding: 6px;
+td,th{
+  border:1px solid #223040;
+  padding:6px;
 }
 
-th {
-  background: #1a2430;
-  color: #9fd3ff;
+th{
+  background:#1a2430;
+  color:#9fd3ff;
 }
+
+.status{
+  margin-top:10px;
+  font-weight:bold;
+  color:#7ee787;
+}
+
+.error{
+  color:#ff6b6b;
+}
+
+.tab{
+  display:none;
+}
+
+.tab.active{
+  display:block;
+}
+
+.navBtn{
+  margin-right:5px;
+}
+
 </style>
 </head>
 
@@ -71,9 +92,11 @@ th {
 
 <!-- LOGIN -->
 <div id="loginBox">
-  <h2>Login</h2>
+  <h2>Warehouse Login</h2>
+
   <input id="email" placeholder="Email">
   <input id="password" type="password" placeholder="Password">
+
   <button onclick="login()">Login</button>
 </div>
 
@@ -82,19 +105,35 @@ th {
 
 <h2>Warehouse Scanner</h2>
 
+<button onclick="showTab('scannerTab')">Scanner</button>
+<button onclick="showTab('rulesTab')">Rules</button>
+
+<!-- SCANNER -->
+<div id="scannerTab" class="tab active">
+
+<select id="destinationSelect">
+  <option value="">Select Destination</option>
+</select>
+
+<button onclick="toggleRules()">Toggle Rule Validation</button>
+
+<div class="status">
+Rules:
+<span id="rulesStatus">OFF</span>
+</div>
+
 <input id="scanInput" placeholder="Scan Data Matrix">
 
 <button onclick="undoLast()">Undo Last</button>
 <button onclick="resetAll()">Reset</button>
 <button onclick="exportExcel()">Export Excel</button>
-<button onclick="toggleView()">Toggle Raw / Grouped</button>
 
 <div class="status">
-  Total Scanned: <span id="totalCount">0</span>
+Total Scanned: <span id="totalCount">0</span>
 </div>
 
 <div class="status">
-  Total Weight: <span id="totalWeight">0.000</span>
+Total Weight: <span id="totalWeight">0.000</span>
 </div>
 
 <div class="status" id="status"></div>
@@ -111,12 +150,46 @@ th {
 <tbody id="table"></tbody>
 </table>
 
+</div>
+
+<!-- RULES -->
+<div id="rulesTab" class="tab">
+
+<h3>Rules Editor</h3>
+
+<input id="newDestination" placeholder="Add Destination">
+<button onclick="addDestination()">Add Destination</button>
+
+<hr>
+
+<select id="ruleDestination">
+  <option value="">Select Destination</option>
+</select>
+
+<input id="ruleGMID" placeholder="Add Allowed GMID">
+<button onclick="addRule()">Add Rule</button>
+
+<table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>GMID</th>
+<th>Remove</th>
+</tr>
+</thead>
+
+<tbody id="rulesTable"></tbody>
+</table>
+
+</div>
+
 <audio id="beepSound" src="beep.mp3"></audio>
 
 </div>
 
 <script>
 
+// FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -135,12 +208,11 @@ const db = firebase.database();
 let buffer = "";
 let timer = null;
 let appStarted = false;
-
 let lastScanKey = null;
-let rawMode = false;
+let rulesEnabled = false;
 
 // LOGIN
-function login() {
+function login(){
   auth.signInWithEmailAndPassword(
     document.getElementById("email").value,
     document.getElementById("password").value
@@ -148,193 +220,316 @@ function login() {
 }
 
 // AUTH
-auth.onAuthStateChanged(user => {
-  if (user) {
-    document.getElementById("loginBox").style.display = "none";
-    document.getElementById("app").style.display = "block";
-    if (!appStarted) {
+auth.onAuthStateChanged(user=>{
+  if(user){
+    document.getElementById("loginBox").style.display="none";
+    document.getElementById("app").style.display="block";
+
+    if(!appStarted){
       startApp();
-      appStarted = true;
+      appStarted=true;
     }
-  } else {
-    document.getElementById("loginBox").style.display = "block";
-    document.getElementById("app").style.display = "none";
+  }else{
+    document.getElementById("loginBox").style.display="block";
+    document.getElementById("app").style.display="none";
   }
 });
 
-// START
-function startApp() {
+// TABS
+function showTab(id){
+  document.querySelectorAll(".tab")
+    .forEach(t=>t.classList.remove("active"));
 
-  const input = document.getElementById("scanInput");
+  document.getElementById(id).classList.add("active");
+}
+
+// START
+function startApp(){
+
+  loadDestinations();
+  loadRules();
+
+  const input=document.getElementById("scanInput");
   input.focus();
 
-  input.addEventListener("input", () => {
+  input.addEventListener("input",()=>{
 
-    buffer = input.value;
+    buffer=input.value;
     clearTimeout(timer);
 
-    timer = setTimeout(() => {
-      if (buffer.length > 10) processScan(buffer);
-      input.value = "";
-      buffer = "";
-    }, 120);
+    timer=setTimeout(()=>{
+      if(buffer.length>10){
+        processScan(buffer);
+      }
+      input.value="";
+      buffer="";
+    },120);
   });
 
-  db.ref("scans").on("value", snap => {
+  db.ref("scans").on("value",snap=>{
 
-    const data = snap.val() || {};
-    const summary = {};
+    const data=snap.val() || {};
 
-    let total = 0;
-    let totalWeight = 0;
+    const summary={};
 
-    Object.values(data).forEach(i => {
+    let total=0;
+    let totalWeight=0;
+
+    Object.values(data).forEach(i=>{
 
       total++;
-      totalWeight += i.weight;
+      totalWeight+=i.weight;
 
-      const key = i.gmid + "|" + i.batch;
+      const key=i.gmid+"|"+i.batch;
 
-      if (!summary[key]) {
-        summary[key] = { gmid:i.gmid, batch:i.batch, qty:0, weight:0 };
+      if(!summary[key]){
+        summary[key]={
+          gmid:i.gmid,
+          batch:i.batch,
+          qty:0,
+          weight:0
+        };
       }
 
       summary[key].qty++;
-      summary[key].weight += i.weight;
+      summary[key].weight+=i.weight;
     });
 
-    document.getElementById("totalCount").innerText = total;
-    document.getElementById("totalWeight").innerText = totalWeight.toFixed(3);
+    document.getElementById("totalCount").innerText=total;
+    document.getElementById("totalWeight").innerText=totalWeight.toFixed(3);
 
-    render(rawMode ? data : summary);
+    render(summary);
   });
 }
 
 // SCAN
-function processScan(scan) {
+async function processScan(scan){
 
-  let gmid = "";
-  let batch = "";
-  let weight = 0;
+  let gmid="";
+  let batch="";
+  let weight=0;
 
-  const parts = scan.split(";");
+  const parts=scan.split(";");
 
-  for (let p of parts) {
-    if (p.startsWith("0100")) gmid = p.slice(-7);
-    else if (p.startsWith("10")) batch = p.substring(2);
-    else if (p.startsWith("3103")) weight = parseInt(p.substring(4)) / 1000;
+  for(let p of parts){
+    if(p.startsWith("0100")) gmid=p.slice(-7);
+    else if(p.startsWith("10")) batch=p.substring(2);
+    else if(p.startsWith("3103")) weight=parseInt(p.substring(4))/1000;
   }
 
-  if (!gmid || !batch || !weight) {
-    document.getElementById("status").innerText = "INVALID SCAN";
+  if(!gmid || !batch || !weight){
+    errorBeep();
+    document.getElementById("status").innerHTML=
+      `<span class="error">INVALID SCAN</span>`;
     return;
+  }
+
+  const destination=document.getElementById("destinationSelect").value;
+
+  if(!destination){
+    errorBeep();
+    document.getElementById("status").innerHTML=
+      `<span class="error">SELECT DESTINATION</span>`;
+    return;
+  }
+
+  if(rulesEnabled){
+
+    const ruleSnap=
+      await db.ref("rules/"+destination+"/"+gmid).once("value");
+
+    if(!ruleSnap.exists()){
+      errorBeep();
+      document.getElementById("status").innerHTML=
+        `<span class="error">
+        GMID ${gmid} NOT ALLOWED FOR ${destination}
+        </span>`;
+      return;
+    }
   }
 
   db.ref("scans").push({
     gmid,
     batch,
     weight,
-    time: Date.now()
-  }).then(ref => {
-    lastScanKey = ref.key;
+    destination,
+    time:Date.now()
+  }).then(ref=>{
+    lastScanKey=ref.key;
+    playBeep();
   });
 
-  document.getElementById("status").innerText =
+  document.getElementById("status").innerText=
     `Loaded ${gmid} | ${batch} | ${weight}`;
 }
 
-// UNDO
-function undoLast() {
-  if (!lastScanKey) return;
-  db.ref("scans/" + lastScanKey).remove();
-  lastScanKey = null;
+// BEEP
+function playBeep(){
+  const b=document.getElementById("beepSound");
+  b.currentTime=0;
+  b.play().catch(()=>{});
 }
 
-// RESET
-function resetAll() {
-  db.ref("scans").remove();
+function errorBeep(){
+  const b=document.getElementById("beepSound");
+  b.currentTime=0;
+  b.play().catch(()=>{});
+  setTimeout(()=>{
+    b.currentTime=0;
+    b.play().catch(()=>{});
+  },200);
 }
 
-// TOGGLE VIEW
-function toggleView() {
-  rawMode = !rawMode;
+// TOGGLE RULES
+function toggleRules(){
+  rulesEnabled=!rulesEnabled;
+  document.getElementById("rulesStatus").innerText=
+    rulesEnabled ? "ON" : "OFF";
 }
 
 // RENDER
-function render(data) {
+function render(summary){
+  const table=document.getElementById("table");
+  table.innerHTML="";
 
-  const table = document.getElementById("table");
-  table.innerHTML = "";
-
-  if (rawMode) {
-
-    Object.values(data).forEach(i => {
-      const row = table.insertRow();
-      row.insertCell(0).innerText = i.gmid;
-      row.insertCell(1).innerText = i.batch;
-      row.insertCell(2).innerText = 1;
-      row.insertCell(3).innerText = i.weight;
-    });
-
-  } else {
-
-    Object.values(data).forEach(i => {
-      const row = table.insertRow();
-      row.insertCell(0).innerText = i.gmid;
-      row.insertCell(1).innerText = i.batch;
-      row.insertCell(2).innerText = i.qty;
-      row.insertCell(3).innerText = i.weight.toFixed(3);
-    });
-  }
+  Object.values(summary).forEach(i=>{
+    const row=table.insertRow();
+    row.insertCell(0).innerText=i.gmid;
+    row.insertCell(1).innerText=i.batch;
+    row.insertCell(2).innerText=i.qty;
+    row.insertCell(3).innerText=i.weight.toFixed(3);
+  });
 }
 
-// EXPORT EXCEL (PROMPTS ADDED HERE)
-function exportExcel() {
+// UNDO
+function undoLast(){
+  if(!lastScanKey) return;
+  db.ref("scans/"+lastScanKey).remove();
+  lastScanKey=null;
+}
 
-  const trailer = prompt("Trailer Number:");
-  const delivery = prompt("Delivery Number:");
-  const shipment = prompt("Shipment Number:");
-  const seal = prompt("Seal Number:");
+// RESET
+function resetAll(){
+  db.ref("scans").remove();
+}
 
-  db.ref("scans").once("value").then(snap => {
+// EXPORT
+function exportExcel(){
 
-    const data = snap.val() || {};
-    const summary = {};
+  const trailer=prompt("Trailer Number:");
+  const delivery=prompt("Delivery Number:");
+  const shipment=prompt("Shipment Number:");
+  const seal=prompt("Seal Number:");
 
-    Object.values(data).forEach(i => {
+  db.ref("scans").once("value").then(snap=>{
 
-      const key = i.gmid + "|" + i.batch;
+    const data=snap.val() || {};
+    const summary={};
 
-      if (!summary[key]) {
-        summary[key] = { gmid:i.gmid, batch:i.batch, qty:0, weight:0 };
+    Object.values(data).forEach(i=>{
+
+      const key=i.gmid+"|"+i.batch;
+
+      if(!summary[key]){
+        summary[key]={
+          gmid:i.gmid,
+          batch:i.batch,
+          qty:0,
+          weight:0
+        };
       }
 
       summary[key].qty++;
-      summary[key].weight += i.weight;
+      summary[key].weight+=i.weight;
     });
 
-    const header = [
-      ["TRAILER", trailer],
-      ["DELIVERY", delivery],
-      ["SHIPMENT", shipment],
-      ["SEAL", seal],
+    const header=[
+      ["TRAILER",trailer],
+      ["DELIVERY",delivery],
+      ["SHIPMENT",shipment],
+      ["SEAL",seal],
       [""],
-      ["GMID", "Batch", "Qty", "Weight"]
+      ["GMID","Batch","Qty","Weight"]
     ];
 
-    const rows = Object.values(summary).map(i => [
+    const rows=Object.values(summary).map(i=>[
       i.gmid,
       i.batch,
       i.qty,
       i.weight.toFixed(3)
     ]);
 
-    const ws = XLSX.utils.aoa_to_sheet(header.concat(rows));
-    const wb = XLSX.utils.book_new();
+    const ws=XLSX.utils.aoa_to_sheet(header.concat(rows));
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"Load");
 
-    XLSX.utils.book_append_sheet(wb, ws, "Load");
+    XLSX.writeFile(wb,`LOAD_${trailer || "EXPORT"}.xlsx`);
+  });
+}
 
-    XLSX.writeFile(wb, `LOAD_${trailer || "EXPORT"}.xlsx`);
+// RULES / DESTINATIONS
+
+function addDestination(){
+  const name=document.getElementById("newDestination").value.trim().toUpperCase();
+  if(!name) return;
+  db.ref("rules/"+name).set(true);
+  document.getElementById("newDestination").value="";
+}
+
+function loadDestinations(){
+  db.ref("rules").on("value",snap=>{
+    const data=snap.val() || {};
+    const selects=[
+      document.getElementById("destinationSelect"),
+      document.getElementById("ruleDestination")
+    ];
+
+    selects.forEach(s=>{
+      s.innerHTML=`<option value="">Select Destination</option>`;
+      Object.keys(data).forEach(d=>{
+        const opt=document.createElement("option");
+        opt.value=d;
+        opt.innerText=d;
+        s.appendChild(opt);
+      });
+    });
+  });
+}
+
+function addRule(){
+  const dest=document.getElementById("ruleDestination").value;
+  const gmid=document.getElementById("ruleGMID").value.trim();
+  if(!dest||!gmid) return;
+
+  db.ref("rules/"+dest+"/"+gmid).set(true);
+  document.getElementById("ruleGMID").value="";
+}
+
+function loadRules(){
+  db.ref("rules").on("value",snap=>{
+    const data=snap.val() || {};
+    const table=document.getElementById("rulesTable");
+    table.innerHTML="";
+
+    Object.keys(data).forEach(dest=>{
+      Object.keys(data[dest]).forEach(gmid=>{
+        if(gmid==="true") return;
+
+        const row=table.insertRow();
+        row.insertCell(0).innerText=dest;
+        row.insertCell(1).innerText=gmid;
+
+        const cell=row.insertCell(2);
+        const btn=document.createElement("button");
+        btn.innerText="X";
+
+        btn.onclick=()=>{
+          db.ref("rules/"+dest+"/"+gmid).remove();
+        };
+
+        cell.appendChild(btn);
+      });
+    });
   });
 }
 
