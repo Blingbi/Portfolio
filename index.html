@@ -123,7 +123,7 @@ th {
 
 <script>
 
-// Firebase config
+// Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -142,6 +142,7 @@ const db = firebase.database();
 let buffer = "";
 let timer = null;
 let totalCount = 0;
+let appStarted = false;
 
 // 🔊 SUCCESS BEEP
 function playBeep() {
@@ -153,7 +154,7 @@ function playBeep() {
   beep.play().catch(() => {});
 }
 
-// 🔊 ERROR = DOUBLE BEEP (same file)
+// 🔊 ERROR DOUBLE BEEP
 function playErrorBeep() {
   const beep = document.getElementById("beepSound");
   if (!beep) return;
@@ -171,7 +172,6 @@ function playErrorBeep() {
 
 // LOGIN
 function login() {
-
   const email = document.getElementById("email").value;
   const pass = document.getElementById("password").value;
 
@@ -185,23 +185,30 @@ function logout() {
   auth.signOut();
 }
 
-// AUTH
+// AUTH FIXED
 auth.onAuthStateChanged(user => {
 
   if (user) {
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("app").style.display = "block";
-    startApp();
+
+    if (!appStarted) {
+      startApp();
+      appStarted = true;
+    }
+
   } else {
     document.getElementById("loginBox").style.display = "block";
     document.getElementById("app").style.display = "none";
   }
 });
 
-// START APP
+// APP START
 function startApp() {
 
   const input = document.getElementById("scanInput");
+
+  input.focus();
 
   input.addEventListener("input", () => {
 
@@ -237,7 +244,7 @@ function startApp() {
   });
 }
 
-// SCAN
+// SCAN PROCESS
 function processScan(scan) {
 
   let gmid = "";
@@ -253,11 +260,10 @@ function processScan(scan) {
     else if (p.startsWith("3103")) weight = parseInt(p.substring(4)) / 1000;
   }
 
-  // ❌ INVALID SCAN
+  // INVALID SCAN
   if (!gmid || !batch || !weight) {
     playErrorBeep();
-    document.getElementById("status").innerText =
-      "INVALID SCAN";
+    document.getElementById("status").innerText = "INVALID SCAN";
     return;
   }
 
@@ -273,4 +279,72 @@ function processScan(scan) {
     document.getElementById("totalCount").innerText = totalCount;
   });
 
-  document
+  document.getElementById("status").innerText =
+    `Loaded ${gmid} | ${batch} | ${weight}`;
+}
+
+// RENDER
+function render(summary) {
+
+  const table = document.getElementById("table");
+  table.innerHTML = "";
+
+  Object.values(summary).forEach(i => {
+
+    const row = table.insertRow();
+
+    row.insertCell(0).innerText = i.gmid;
+    row.insertCell(1).innerText = i.batch;
+    row.insertCell(2).innerText = i.qty;
+    row.insertCell(3).innerText = i.weight.toFixed(3);
+  });
+}
+
+// RESET
+function resetAll() {
+  db.ref("scans").remove();
+  totalCount = 0;
+  document.getElementById("totalCount").innerText = "0";
+  document.getElementById("status").innerText = "";
+}
+
+// EXPORT
+function exportCSV() {
+
+  db.ref("scans").once("value").then(snap => {
+
+    const data = snap.val() || {};
+    const summary = {};
+
+    Object.values(data).forEach(i => {
+
+      const key = i.gmid + "|" + i.batch;
+
+      if (!summary[key]) {
+        summary[key] = { gmid:i.gmid, batch:i.batch, qty:0, weight:0 };
+      }
+
+      summary[key].qty++;
+      summary[key].weight += i.weight;
+    });
+
+    let csv = "GMID,Batch,Qty,Weight\n";
+
+    Object.values(summary).forEach(i => {
+      csv += `${i.gmid},${i.batch},${i.qty},${i.weight.toFixed(3)}\n`;
+    });
+
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "warehouse.csv";
+    a.click();
+  });
+}
+
+</script>
+
+</body>
+</html>
