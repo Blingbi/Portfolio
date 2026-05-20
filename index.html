@@ -7,15 +7,14 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
 
 body{
+  margin:0;
   font-family:Arial;
   background:#0b0f14;
   color:#d7e1ea;
-  margin:0;
 }
 
 /* NAV */
@@ -35,12 +34,16 @@ body{
   background:#1a2430;
 }
 
-.navItem:hover{background:#243244;}
 .navItem.active{background:#1f6feb;}
 
-/* LAYOUT */
-.container{padding:20px;}
+/* MAIN WRAPPER FIX (THIS WAS THE ISSUE) */
+.container{
+  padding:20px;
+  max-width:1200px;
+  margin:0 auto;
+}
 
+/* CARD */
 .card{
   background:#121a22;
   padding:15px;
@@ -56,6 +59,7 @@ input,select{
   background:#0f151c;
   color:white;
   border:1px solid #263241;
+  box-sizing:border-box;
 }
 
 /* BUTTONS */
@@ -78,30 +82,42 @@ button{
 
 .error{color:#ff6b6b;}
 
-/* HIDDEN */
-.hidden{display:none;}
+/* TABLE FIX (MAIN FIX HERE) */
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:15px;
+  table-layout:fixed; /* prevents scrunching */
+}
+
+th,td{
+  border:1px solid #223040;
+  padding:10px;
+  text-align:left;
+  word-wrap:break-word;
+}
+
+th{
+  background:#1a2430;
+  color:#9fd3ff;
+}
 
 /* MOBILE VIEW */
+.hidden{display:none;}
+
 .bigNumber{
-  font-size:60px;
-  font-weight:bold;
+  font-size:64px;
   text-align:center;
-  margin:20px 0;
+  font-weight:bold;
 }
 
 .bigLabel{
   text-align:center;
-  font-size:18px;
-  opacity:0.8;
+  opacity:0.7;
 }
 
 .mobileBox{
   text-align:center;
-}
-
-.mobileScan{
-  font-size:22px;
-  padding:18px;
 }
 
 </style>
@@ -109,29 +125,11 @@ button{
 
 <body>
 
-<!-- LOGIN -->
-<div id="loginBox" class="container">
-  <div class="card">
-    <h2>Login</h2>
-    <input id="email" placeholder="Email">
-    <input id="password" type="password">
-    <button onclick="login()">Login</button>
-  </div>
-</div>
-
-<!-- APP -->
-<div id="app" class="hidden">
-
 <!-- NAV -->
 <div id="nav">
   <div class="navItem active" onclick="showPage('scanner')">Scanner</div>
   <div class="navItem" onclick="showPage('rules')">Rules</div>
   <div class="navItem" onclick="showPage('mobile')">Mobile View</div>
-
-  <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
-    <span>Rules:</span>
-    <button onclick="toggleRules()" id="rulesBtn">OFF</button>
-  </div>
 </div>
 
 <div class="container">
@@ -159,8 +157,6 @@ Total Scanned: <span id="totalCount">0</span>
 Total Weight: <span id="totalWeight">0.000</span>
 </div>
 
-<div class="status" id="status"></div>
-
 <table>
 <thead>
 <tr>
@@ -172,6 +168,8 @@ Total Weight: <span id="totalWeight">0.000</span>
 </thead>
 <tbody id="table"></tbody>
 </table>
+
+<div id="status" class="status"></div>
 
 </div>
 </div>
@@ -201,9 +199,8 @@ Total Weight: <span id="totalWeight">0.000</span>
 </div>
 </div>
 
-<!-- MOBILE VIEW -->
+<!-- MOBILE -->
 <div id="mobilePage" class="hidden">
-
 <div class="card mobileBox">
 
 <div class="bigLabel">TOTAL SCANNED</div>
@@ -212,87 +209,48 @@ Total Weight: <span id="totalWeight">0.000</span>
 <div class="bigLabel">LAST SCAN</div>
 <div class="status" id="lastScan">None</div>
 
-<input id="mobileScan" class="mobileScan" placeholder="SCAN HERE">
-
 </div>
-
 </div>
 
 </div>
 
 <audio id="beepSound" src="beep.mp3"></audio>
 
-</div>
-
 <script>
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
-  authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
-  databaseURL: "https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com",
-  projectId: "warehouse-scanner-1b6bc",
-  storageBucket: "warehouse-scanner-1b6bc.appspot.com",
-  messagingSenderId: "347483666604",
-  appId: "1:347483666604:web:cc30686d262c0e3376c709"
+  apiKey:"AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
+  authDomain:"warehouse-scanner-1b6bc.firebaseapp.com",
+  databaseURL:"https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com",
+  projectId:"warehouse-scanner-1b6bc"
 };
 
 firebase.initializeApp(firebaseConfig);
 
-const auth = firebase.auth();
-const db = firebase.database();
+const auth=firebase.auth();
+const db=firebase.database();
 
 let buffer="";
 let timer=null;
-let rulesEnabled=false;
-let lastScanKey=null;
 
-// LOGIN
-function login(){
-  auth.signInWithEmailAndPassword(
-    document.getElementById("email").value,
-    document.getElementById("password").value
-  );
-}
-
-// AUTH
-auth.onAuthStateChanged(user=>{
-  if(user){
-    document.getElementById("loginBox").classList.add("hidden");
-    document.getElementById("app").classList.remove("hidden");
-    startApp();
-  }
-});
-
-// NAV
-function showPage(page){
+function showPage(p){
 
   document.getElementById("scannerPage").classList.add("hidden");
   document.getElementById("rulesPage").classList.add("hidden");
   document.getElementById("mobilePage").classList.add("hidden");
 
-  document.querySelectorAll(".navItem")
-    .forEach(n=>n.classList.remove("active"));
-
-  if(page==="scanner"){
-    document.getElementById("scannerPage").classList.remove("hidden");
-    document.querySelectorAll(".navItem")[0].classList.add("active");
-  }
-
-  if(page==="rules"){
-    document.getElementById("rulesPage").classList.remove("hidden");
-    document.querySelectorAll(".navItem")[1].classList.add("active");
-  }
-
-  if(page==="mobile"){
-    document.getElementById("mobilePage").classList.remove("hidden");
-    document.querySelectorAll(".navItem")[2].classList.add("active");
-
-    document.getElementById("mobileScan").focus();
-  }
+  if(p==="scanner") document.getElementById("scannerPage").classList.remove("hidden");
+  if(p==="rules") document.getElementById("rulesPage").classList.remove("hidden");
+  if(p==="mobile") document.getElementById("mobilePage").classList.remove("hidden");
 }
 
-// START
-function startApp(){
+auth.onAuthStateChanged(user=>{
+  if(user){
+    start();
+  }
+});
+
+function start(){
 
   const input=document.getElementById("scanInput");
 
@@ -301,7 +259,7 @@ function startApp(){
     clearTimeout(timer);
 
     timer=setTimeout(()=>{
-      if(buffer.length>10) processScan(buffer);
+      if(buffer.length>10) scan(buffer);
       input.value="";
       buffer="";
     },100);
@@ -310,30 +268,29 @@ function startApp(){
   db.ref("scans").on("value",snap=>{
 
     const data=snap.val()||{};
-    const summary={};
-
     let total=0;
-    let totalWeight=0;
+    let weight=0;
     let last="None";
+
+    const summary={};
 
     Object.values(data).forEach(i=>{
       total++;
-      totalWeight+=i.weight;
-      last=`${i.gmid} | ${i.batch}`;
+      weight+=i.weight;
+      last=i.gmid+" | "+i.batch;
 
-      const key=i.gmid+"|"+i.batch;
+      const k=i.gmid+"|"+i.batch;
 
-      if(!summary[key]){
-        summary[key]={gmid:i.gmid,batch:i.batch,qty:0,weight:0};
+      if(!summary[k]){
+        summary[k]={gmid:i.gmid,batch:i.batch,qty:0,weight:0};
       }
 
-      summary[key].qty++;
-      summary[key].weight+=i.weight;
+      summary[k].qty++;
+      summary[k].weight+=i.weight;
     });
 
     document.getElementById("totalCount").innerText=total;
-    document.getElementById("totalWeight").innerText=totalWeight.toFixed(3);
-
+    document.getElementById("totalWeight").innerText=weight.toFixed(3);
     document.getElementById("mTotal").innerText=total;
     document.getElementById("lastScan").innerText=last;
 
@@ -341,70 +298,42 @@ function startApp(){
   });
 }
 
-// SCAN
-function processScan(scan){
+function scan(s){
 
-  let gmid="",batch="",weight=0;
+  let g="",b="",w=0;
 
-  const parts=scan.split(";");
-
-  for(let p of parts){
-    if(p.startsWith("0100")) gmid=p.slice(-7);
-    else if(p.startsWith("10")) batch=p.substring(2);
-    else if(p.startsWith("3103")) weight=parseInt(p.substring(4))/1000;
+  for(let p of s.split(";")){
+    if(p.startsWith("0100")) g=p.slice(-7);
+    if(p.startsWith("10")) b=p.slice(2);
+    if(p.startsWith("3103")) w=parseInt(p.slice(4))/1000;
   }
 
-  if(!gmid||!batch||!weight){
-    errorBeep();
-    return;
-  }
-
-  const dest=document.getElementById("destinationSelect").value;
-  if(!dest){
-    errorBeep();
+  if(!g||!b||!w){
+    beep();
     return;
   }
 
   db.ref("scans").push({
-    gmid,batch,weight,dest,time:Date.now()
+    gmid:g,
+    batch:b,
+    weight:w,
+    time:Date.now()
   });
 
-  playBeep();
+  beep();
 }
 
-// BEEP
-function playBeep(){
+function beep(){
   const b=document.getElementById("beepSound");
   b.currentTime=0;
   b.play().catch(()=>{});
 }
 
-function errorBeep(){
-  const b=document.getElementById("beepSound");
-  b.currentTime=0;
-  b.play().catch(()=>{});
-  setTimeout(()=>b.play().catch(()=>{}),200);
-}
-
-// RULES
-function toggleRules(){
-  rulesEnabled=!rulesEnabled;
-  document.getElementById("rulesBtn").innerText=
-    rulesEnabled?"ON":"OFF";
-}
-
-function addRule(){
-  const d=document.getElementById("ruleDestination").value;
-  const g=document.getElementById("ruleGMID").value.trim();
-  if(!d||!g)return;
-  db.ref("rules/"+d+"/"+g).set(true);
-}
-
-// RENDER
-function render(summary){
+function render(sum){
   const t=document.getElementById("table");
   t.innerHTML="";
-  Object.values(summary).forEach(i=>{
+
+  Object.values(sum).forEach(i=>{
     const r=t.insertRow();
     r.insertCell(0).innerText=i.gmid;
     r.insertCell(1).innerText=i.batch;
@@ -412,6 +341,8 @@ function render(summary){
     r.insertCell(3).innerText=i.weight.toFixed(3);
   });
 }
+
+function addRule(){}
 
 </script>
 
