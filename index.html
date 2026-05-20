@@ -8,6 +8,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
 <style>
 
 body{
@@ -23,7 +25,6 @@ body{
   border-bottom:1px solid #1f2a36;
   padding:10px;
   gap:10px;
-  align-items:center;
 }
 
 .navItem{
@@ -94,6 +95,7 @@ th{
 
 .hidden{display:none;}
 
+/* MOBILE */
 #mobilePage{
   padding:0;
 }
@@ -106,7 +108,6 @@ th{
   align-items:center;
   text-align:center;
   padding:20px;
-  box-sizing:border-box;
 }
 
 .bigLabel{
@@ -118,14 +119,12 @@ th{
 .bigNumber{
   font-size:120px;
   font-weight:900;
-  line-height:1;
   margin:10px 0;
 }
 
 #mobileScan{
   position:absolute;
   top:-1000px;
-  inputmode:none;
 }
 
 </style>
@@ -157,7 +156,14 @@ th{
 
 <input id="scanInput" placeholder="Scan Data Matrix">
 
-<button onclick="exportCSV()">Export CSV</button>
+<!-- RULE TOGGLE MOVED HERE -->
+<button onclick="toggleRules()" id="rulesToggleBtn">Rules: ON</button>
+
+<div class="status">
+Rules Status: <span id="rulesStatus">ENABLED</span>
+</div>
+
+<button onclick="exportExcel()">Export Excel</button>
 <button onclick="resetAll()">Reset All</button>
 
 <div class="status">
@@ -186,7 +192,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 </div>
 </div>
 
-<!-- RULES -->
+<!-- RULES PAGE -->
 <div id="rulesPage" class="hidden">
 
 <div class="card">
@@ -194,8 +200,6 @@ Total Weight: <span id="totalWeight">0.000</span>
 <h3>Rules</h3>
 
 <input id="ruleSearch" placeholder="Search GMID or Destination..." oninput="renderRules()">
-
-<button onclick="toggleRules()" id="rulesToggleBtn">Rules: ON</button>
 
 <select id="ruleDestination">
   <option value="">Select Destination</option>
@@ -232,7 +236,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 <div class="bigNumber" id="mTotal">0</div>
 
 <div class="bigLabel">LAST SCAN</div>
-<div class="bigNumber" style="font-size:42px;" id="lastScan">None</div>
+<div class="bigNumber" id="lastScan">None</div>
 
 <input id="mobileScan" autocomplete="off">
 
@@ -259,8 +263,8 @@ const db = firebase.database();
 let buffer="";
 let timer=null;
 
-let rulesEnabled=true;
 let allRulesCache={};
+let rulesEnabled=true;
 
 /* NAV */
 function showPage(p){
@@ -274,17 +278,7 @@ function showPage(p){
 
   if(p==="mobile"){
     document.getElementById("mobilePage").classList.remove("hidden");
-    enableMobileFocus();
   }
-}
-
-/* MOBILE FIX */
-function enableMobileFocus(){
-  const m=document.getElementById("mobileScan");
-
-  document.getElementById("mobilePage").addEventListener("click",()=>{
-    m.focus({preventScroll:true});
-  },{once:true});
 }
 
 /* START */
@@ -396,8 +390,8 @@ function render(sum){
   });
 }
 
-/* EXPORT */
-function exportCSV(){
+/* EXCEL EXPORT */
+function exportExcel(){
 
   db.ref("scans").once("value").then(snap=>{
 
@@ -410,38 +404,38 @@ function exportCSV(){
 
       if(!summary[key]){
         summary[key]={
-          gmid:i.gmid,
-          batch:i.batch,
-          dest:i.dest||"UNASSIGNED",
-          qty:0,
-          weight:0
+          GMID:i.gmid,
+          Batch:i.batch,
+          Destination:i.dest||"UNASSIGNED",
+          Qty:0,
+          Weight:0
         };
       }
 
-      summary[key].qty++;
-      summary[key].weight+=i.weight;
+      summary[key].Qty++;
+      summary[key].Weight+=i.weight;
     });
 
-    let csv="GMID,Batch,Destination,Qty,Weight\n";
+    const rows=Object.values(summary).map(i=>({
+      GMID:i.GMID,
+      Batch:i.Batch,
+      Destination:i.Destination,
+      Qty:i.Qty,
+      Weight:Number(i.Weight.toFixed(3))
+    }));
 
-    Object.values(summary).forEach(i=>{
-      csv+=`${i.gmid},${i.batch},${i.dest},${i.qty},${i.weight.toFixed(3)}\n`;
-    });
+    const ws=XLSX.utils.json_to_sheet(rows);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"Warehouse");
 
-    const blob=new Blob([csv],{type:"text/csv"});
-    const url=URL.createObjectURL(blob);
-
-    const a=document.createElement("a");
-    a.href=url;
-    a.download="warehouse_export.csv";
-    a.click();
+    XLSX.writeFile(wb,"warehouse_export.xlsx");
   });
 }
 
 /* RESET */
 function resetAll(){
 
-  if(!confirm("Clear ALL scanned data?")) return;
+  if(!confirm("Clear ALL scans?")) return;
 
   db.ref("scans").remove().then(()=>{
     document.getElementById("status").innerText="All scans cleared";
@@ -467,12 +461,18 @@ function loadRules(){
   });
 }
 
+/* RULE TOGGLE */
 function toggleRules(){
 
   rulesEnabled=!rulesEnabled;
 
-  document.getElementById("rulesToggleBtn").innerText=
-    rulesEnabled ? "Rules: ON" : "Rules: OFF";
+  const btn=document.getElementById("rulesToggleBtn");
+  const status=document.getElementById("rulesStatus");
+
+  btn.innerText = rulesEnabled ? "Rules: ON" : "Rules: OFF";
+
+  status.innerText = rulesEnabled ? "ENABLED" : "DISABLED";
+  status.style.color = rulesEnabled ? "#7ee787" : "#ff6b6b";
 }
 
 function renderRules(){
