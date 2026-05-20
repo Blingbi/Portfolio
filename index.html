@@ -78,11 +78,14 @@ td,th {
 <tbody id="table"></tbody>
 </table>
 
+<!-- 🔊 BEEP SOUND -->
+<audio id="beepSound" src="beep.mp3" preload="auto"></audio>
+
 </div>
 
 <script>
 
-// Firebase config
+// Firebase config (yours)
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -101,6 +104,15 @@ const db = firebase.database();
 let buffer = "";
 let timer = null;
 
+// 🔊 BEEP FUNCTION
+function playBeep() {
+  const beep = document.getElementById("beepSound");
+  if (!beep) return;
+
+  beep.currentTime = 0;
+  beep.play().catch(() => {});
+}
+
 // LOGIN
 function login() {
 
@@ -108,7 +120,6 @@ function login() {
   const pass = document.getElementById("password").value;
 
   auth.signInWithEmailAndPassword(email, pass)
-    .then(() => {})
     .catch(err => {
       document.getElementById("loginStatus").innerText = err.message;
     });
@@ -170,6 +181,7 @@ function startApp() {
   });
 }
 
+// SCAN PROCESS (UPDATED WITH BEEP)
 function processScan(scan) {
 
   let gmid = "";
@@ -192,12 +204,16 @@ function processScan(scan) {
     batch,
     weight,
     time: Date.now()
+  })
+  .then(() => {
+    playBeep(); // 🔊 SUCCESS BEEP
   });
 
   document.getElementById("status").innerText =
     `Sent ${gmid} | ${batch} | ${weight}`;
 }
 
+// RENDER TABLE
 function render(summary) {
 
   const table = document.getElementById("table");
