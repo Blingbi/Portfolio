@@ -7,6 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
@@ -81,12 +82,6 @@ th {
 
 <h2>Warehouse Scanner</h2>
 
-<!-- LOAD INFO -->
-<input id="trailer" placeholder="Trailer Number">
-<input id="delivery" placeholder="Delivery Number">
-<input id="shipment" placeholder="Shipment Number">
-<input id="seal" placeholder="Seal Number">
-
 <input id="scanInput" placeholder="Scan Data Matrix">
 
 <button onclick="undoLast()">Undo Last</button>
@@ -154,16 +149,13 @@ function login() {
 
 // AUTH
 auth.onAuthStateChanged(user => {
-
   if (user) {
     document.getElementById("loginBox").style.display = "none";
     document.getElementById("app").style.display = "block";
-
     if (!appStarted) {
       startApp();
       appStarted = true;
     }
-
   } else {
     document.getElementById("loginBox").style.display = "block";
     document.getElementById("app").style.display = "none";
@@ -191,11 +183,10 @@ function startApp() {
   db.ref("scans").on("value", snap => {
 
     const data = snap.val() || {};
+    const summary = {};
 
     let total = 0;
     let totalWeight = 0;
-
-    const summary = {};
 
     Object.values(data).forEach(i => {
 
@@ -297,8 +288,13 @@ function render(data) {
   }
 }
 
-// EXPORT EXCEL
+// EXPORT EXCEL (PROMPTS ADDED HERE)
 function exportExcel() {
+
+  const trailer = prompt("Trailer Number:");
+  const delivery = prompt("Delivery Number:");
+  const shipment = prompt("Shipment Number:");
+  const seal = prompt("Seal Number:");
 
   db.ref("scans").once("value").then(snap => {
 
@@ -316,11 +312,6 @@ function exportExcel() {
       summary[key].qty++;
       summary[key].weight += i.weight;
     });
-
-    const trailer = document.getElementById("trailer").value || "";
-    const delivery = document.getElementById("delivery").value || "";
-    const shipment = document.getElementById("shipment").value || "";
-    const seal = document.getElementById("seal").value || "";
 
     const header = [
       ["TRAILER", trailer],
