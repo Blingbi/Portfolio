@@ -165,6 +165,8 @@ th{
 
 <input id="scanInput" placeholder="Scan Data Matrix">
 
+<button onclick="exportCSV()">Export CSV</button>
+
 <div class="status">
 Total Scanned: <span id="totalCount">0</span>
 </div>
@@ -200,9 +202,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 
 <input id="ruleSearch" placeholder="Search GMID or Destination..." oninput="renderRules()">
 
-<button onclick="toggleRules()" id="rulesToggleBtn">
-Rules: ON
-</button>
+<button onclick="toggleRules()" id="rulesToggleBtn">Rules: ON</button>
 
 <select id="ruleDestination">
   <option value="">Select Destination</option>
@@ -263,10 +263,9 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
-let buffer="";
-let timer=null;
+let buffer = "";
+let timer = null;
 
-/* RULE STATE */
 let rulesEnabled = true;
 let allRulesCache = {};
 
@@ -278,18 +277,15 @@ function showPage(p){
   document.getElementById("mobilePage").classList.add("hidden");
 
   if(p==="scanner") document.getElementById("scannerPage").classList.remove("hidden");
-
   if(p==="rules") document.getElementById("rulesPage").classList.remove("hidden");
 
   if(p==="mobile"){
     document.getElementById("mobilePage").classList.remove("hidden");
-
-    // IMPORTANT: no auto keyboard popup
     enableMobileFocus();
   }
 }
 
-/* MOBILE FOCUS FIX */
+/* MOBILE FIX (no auto keyboard) */
 function enableMobileFocus(){
   const m=document.getElementById("mobileScan");
 
@@ -390,18 +386,62 @@ function scan(s){
   });
 }
 
-/* RENDER TABLE */
+/* RENDER */
 function render(sum){
+
   const t=document.getElementById("table");
   t.innerHTML="";
 
   Object.values(sum).forEach(i=>{
     const r=t.insertRow();
+
     r.insertCell(0).innerText=i.gmid;
     r.insertCell(1).innerText=i.batch;
     r.insertCell(2).innerText=i.dest;
     r.insertCell(3).innerText=i.qty;
     r.insertCell(4).innerText=i.weight.toFixed(3);
+  });
+}
+
+/* EXPORT */
+function exportCSV(){
+
+  db.ref("scans").once("value").then(snap=>{
+
+    const data=snap.val()||{};
+    const summary={};
+
+    Object.values(data).forEach(i=>{
+
+      const key=i.gmid+"|"+i.batch+"|"+(i.dest||"UNASSIGNED");
+
+      if(!summary[key]){
+        summary[key]={
+          gmid:i.gmid,
+          batch:i.batch,
+          dest:i.dest||"UNASSIGNED",
+          qty:0,
+          weight:0
+        };
+      }
+
+      summary[key].qty++;
+      summary[key].weight+=i.weight;
+    });
+
+    let csv="GMID,Batch,Destination,Qty,Weight\n";
+
+    Object.values(summary).forEach(i=>{
+      csv+=`${i.gmid},${i.batch},${i.dest},${i.qty},${i.weight.toFixed(3)}\n`;
+    });
+
+    const blob=new Blob([csv],{type:"text/csv"});
+    const url=URL.createObjectURL(blob);
+
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="warehouse_export.csv";
+    a.click();
   });
 }
 
