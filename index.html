@@ -95,9 +95,10 @@ th{
 
 .hidden{display:none;}
 
-/* MOBILE */
-#mobilePage{
-  padding:0;
+/* hidden scan inputs */
+#gunScan, #mobileGun{
+  position:absolute;
+  left:-9999px;
 }
 
 .mobileBox{
@@ -120,11 +121,6 @@ th{
   font-size:120px;
   font-weight:900;
   margin:10px 0;
-}
-
-#mobileScan{
-  position:absolute;
-  top:-1000px;
 }
 
 </style>
@@ -156,12 +152,7 @@ th{
 
 <input id="scanInput" placeholder="Scan Data Matrix">
 
-<!-- RULE TOGGLE MOVED HERE -->
-<button onclick="toggleRules()" id="rulesToggleBtn">Rules: ON</button>
-
-<div class="status">
-Rules Status: <span id="rulesStatus">ENABLED</span>
-</div>
+<input id="gunScan" autocomplete="off">
 
 <button onclick="exportExcel()">Export Excel</button>
 <button onclick="resetAll()">Reset All</button>
@@ -192,14 +183,13 @@ Total Weight: <span id="totalWeight">0.000</span>
 </div>
 </div>
 
-<!-- RULES PAGE -->
+<!-- RULES -->
 <div id="rulesPage" class="hidden">
-
 <div class="card">
 
 <h3>Rules</h3>
 
-<input id="ruleSearch" placeholder="Search GMID or Destination..." oninput="renderRules()">
+<input id="ruleSearch" placeholder="Search..." oninput="renderRules()">
 
 <select id="ruleDestination">
   <option value="">Select Destination</option>
@@ -238,7 +228,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 <div class="bigLabel">LAST SCAN</div>
 <div class="bigNumber" id="lastScan">None</div>
 
-<input id="mobileScan" autocomplete="off">
+<input id="mobileGun" autocomplete="off">
 
 </div>
 
@@ -257,14 +247,14 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 
-const auth = firebase.auth();
 const db = firebase.database();
 
-let buffer="";
-let timer=null;
+let buffer = "";
+let timer = null;
 
-let allRulesCache={};
-let rulesEnabled=true;
+/* scan lock */
+let lastScanKey = "";
+let lastScanTime = 0;
 
 /* NAV */
 function showPage(p){
@@ -273,86 +263,25 @@ function showPage(p){
   document.getElementById("rulesPage").classList.add("hidden");
   document.getElementById("mobilePage").classList.add("hidden");
 
-  if(p==="scanner") document.getElementById("scannerPage").classList.remove("hidden");
-  if(p==="rules") document.getElementById("rulesPage").classList.remove("hidden");
+  if(p==="scanner"){
+    document.getElementById("scannerPage").classList.remove("hidden");
+    setTimeout(()=>document.getElementById("gunScan").focus(),150);
+  }
+
+  if(p==="rules"){
+    document.getElementById("rulesPage").classList.remove("hidden");
+  }
 
   if(p==="mobile"){
     document.getElementById("mobilePage").classList.remove("hidden");
+    setTimeout(()=>document.getElementById("mobileGun").focus(),150);
   }
 }
 
-/* START */
-auth.onAuthStateChanged(user=>{
-  if(user) start();
-});
+/* SHARED SCAN ENGINE */
+function processScan(s){
 
-function start(){
-
-  loadRules();
-
-  const input=document.getElementById("scanInput");
-
-  input.addEventListener("input",()=>{
-    buffer=input.value;
-    clearTimeout(timer);
-
-    timer=setTimeout(()=>{
-      if(buffer.length>10) scan(buffer);
-      input.value="";
-      buffer="";
-    },100);
-  });
-
-  const mobileInput=document.getElementById("mobileScan");
-
-  mobileInput.addEventListener("input",()=>{
-    buffer=mobileInput.value;
-    clearTimeout(timer);
-
-    timer=setTimeout(()=>{
-      if(buffer.length>10) scan(buffer);
-      mobileInput.value="";
-      buffer="";
-    },100);
-  });
-
-  db.ref("scans").on("value",snap=>{
-
-    const data=snap.val()||{};
-    let total=0;
-    let weight=0;
-    let last="None";
-
-    const summary={};
-
-    Object.values(data).forEach(i=>{
-      total++;
-      weight+=i.weight;
-      last=`${i.gmid} | ${i.batch}`;
-
-      const k=i.gmid+"|"+i.batch;
-
-      if(!summary[k]){
-        summary[k]={gmid:i.gmid,batch:i.batch,dest:i.dest||"UNASSIGNED",qty:0,weight:0};
-      }
-
-      summary[k].qty++;
-      summary[k].weight+=i.weight;
-    });
-
-    document.getElementById("totalCount").innerText=total;
-    document.getElementById("totalWeight").innerText=weight.toFixed(3);
-    document.getElementById("mTotal").innerText=total;
-    document.getElementById("lastScan").innerText=last;
-
-    render(summary);
-  });
-}
-
-/* SCAN */
-function scan(s){
-
-  let g="",b="",w=0;
+  let g="", b="", w=0;
 
   for(let p of s.split(";")){
     if(p.startsWith("0100")) g=p.slice(-7);
@@ -360,37 +289,110 @@ function scan(s){
     if(p.startsWith("3103")) w=parseInt(p.slice(4))/1000;
   }
 
-  if(!g||!b||!w) return;
+  if(!g || !b || !w) return;
 
-  const dest=document.getElementById("destinationSelect").value || "UNASSIGNED";
+  const key = g+"|"+b;
+  const now = Date.now();
+
+  if(key === lastScanKey && (now - lastScanTime) < 1000){
+    return;
+  }
+
+  lastScanKey = key;
+  lastScanTime = now;
+
+  const dest = document.getElementById("destinationSelect").value || "UNASSIGNED";
 
   db.ref("scans").push({
     gmid:g,
     batch:b,
     weight:w,
     dest:dest,
-    time:Date.now()
+    time:now
   });
 }
 
-/* RENDER */
-function render(sum){
+/* SCANNER GUN */
+document.getElementById("gunScan").addEventListener("input",()=>{
+  buffer = document.getElementById("gunScan").value.replace(/\n|\r/g,'');
+
+  clearTimeout(timer);
+
+  timer = setTimeout(()=>{
+    if(buffer.length > 3){
+      processScan(buffer);
+    }
+
+    document.getElementById("gunScan").value="";
+    buffer="";
+    document.getElementById("gunScan").focus();
+
+  },60);
+});
+
+/* MOBILE GUN */
+document.getElementById("mobileGun").addEventListener("input",()=>{
+  buffer = document.getElementById("mobileGun").value.replace(/\n|\r/g,'');
+
+  clearTimeout(timer);
+
+  timer = setTimeout(()=>{
+    if(buffer.length > 3){
+      processScan(buffer);
+    }
+
+    document.getElementById("mobileGun").value="";
+    buffer="";
+    document.getElementById("mobileGun").focus();
+
+  },60);
+});
+
+/* LIVE DATA */
+db.ref("scans").on("value",snap=>{
+
+  const data = snap.val() || {};
+  let total=0;
+  let weight=0;
+  let last="None";
+
+  const summary={};
+
+  Object.values(data).forEach(i=>{
+    total++;
+    weight+=i.weight;
+    last=`${i.gmid} | ${i.batch}`;
+
+    const k=i.gmid+"|"+i.batch;
+
+    if(!summary[k]){
+      summary[k]={gmid:i.gmid,batch:i.batch,dest:i.dest,qty:0,weight:0};
+    }
+
+    summary[k].qty++;
+    summary[k].weight+=i.weight;
+  });
+
+  document.getElementById("totalCount").innerText=total;
+  document.getElementById("totalWeight").innerText=weight.toFixed(3);
+  document.getElementById("mTotal").innerText=total;
+  document.getElementById("lastScan").innerText=last;
 
   const t=document.getElementById("table");
   t.innerHTML="";
 
-  Object.values(sum).forEach(i=>{
+  Object.values(summary).forEach(i=>{
     const r=t.insertRow();
-
     r.insertCell(0).innerText=i.gmid;
     r.insertCell(1).innerText=i.batch;
     r.insertCell(2).innerText=i.dest;
     r.insertCell(3).innerText=i.qty;
     r.insertCell(4).innerText=i.weight.toFixed(3);
   });
-}
 
-/* EXCEL EXPORT */
+});
+
+/* EXPORT */
 function exportExcel(){
 
   db.ref("scans").once("value").then(snap=>{
@@ -400,13 +402,13 @@ function exportExcel(){
 
     Object.values(data).forEach(i=>{
 
-      const key=i.gmid+"|"+i.batch+"|"+(i.dest||"UNASSIGNED");
+      const key=i.gmid+"|"+i.batch+"|"+i.dest;
 
       if(!summary[key]){
         summary[key]={
           GMID:i.gmid,
           Batch:i.batch,
-          Destination:i.dest||"UNASSIGNED",
+          Destination:i.dest,
           Qty:0,
           Weight:0
         };
@@ -434,77 +436,9 @@ function exportExcel(){
 
 /* RESET */
 function resetAll(){
-
-  if(!confirm("Clear ALL scans?")) return;
-
-  db.ref("scans").remove().then(()=>{
-    document.getElementById("status").innerText="All scans cleared";
-  });
-}
-
-/* RULES */
-function addRule(){
-
-  const d=document.getElementById("ruleDestination").value;
-  const g=document.getElementById("ruleGMID").value.trim();
-
-  if(!d||!g) return;
-
-  db.ref("rules/"+d+"/"+g).set(true);
-}
-
-function loadRules(){
-
-  db.ref("rules").on("value",snap=>{
-    allRulesCache=snap.val()||{};
-    renderRules();
-  });
-}
-
-/* RULE TOGGLE */
-function toggleRules(){
-
-  rulesEnabled=!rulesEnabled;
-
-  const btn=document.getElementById("rulesToggleBtn");
-  const status=document.getElementById("rulesStatus");
-
-  btn.innerText = rulesEnabled ? "Rules: ON" : "Rules: OFF";
-
-  status.innerText = rulesEnabled ? "ENABLED" : "DISABLED";
-  status.style.color = rulesEnabled ? "#7ee787" : "#ff6b6b";
-}
-
-function renderRules(){
-
-  const table=document.getElementById("rulesTable");
-  const search=(document.getElementById("ruleSearch").value||"").toLowerCase();
-
-  table.innerHTML="";
-
-  Object.keys(allRulesCache).forEach(dest=>{
-    Object.keys(allRulesCache[dest]).forEach(gmid=>{
-
-      if(!dest.toLowerCase().includes(search) &&
-         !gmid.toLowerCase().includes(search)) return;
-
-      const row=table.insertRow();
-
-      row.insertCell(0).innerText=dest;
-      row.insertCell(1).innerText=gmid;
-
-      const cell=row.insertCell(2);
-
-      const btn=document.createElement("button");
-      btn.innerText="Delete";
-
-      btn.onclick=()=>{
-        db.ref("rules/"+dest+"/"+gmid).remove();
-      };
-
-      cell.appendChild(btn);
-    });
-  });
+  if(confirm("Clear all scans?")){
+    db.ref("scans").remove();
+  }
 }
 
 </script>
