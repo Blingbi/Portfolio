@@ -101,7 +101,7 @@ th{
 /* HIDE */
 .hidden{display:none;}
 
-/* MOBILE MODE */
+/* MOBILE */
 #mobilePage{
   padding:0;
 }
@@ -133,6 +133,7 @@ th{
 #mobileScan{
   position:absolute;
   top:-1000px;
+  inputmode:none;
 }
 
 </style>
@@ -154,7 +155,6 @@ th{
 
 <div class="card">
 
-<!-- Destination OPTIONAL -->
 <select id="destinationSelect">
   <option value="">No Destination (optional)</option>
   <option value="CENTRAL">Central</option>
@@ -197,6 +197,12 @@ Total Weight: <span id="totalWeight">0.000</span>
 <div class="card">
 
 <h3>Rules</h3>
+
+<input id="ruleSearch" placeholder="Search GMID or Destination..." oninput="renderRules()">
+
+<button onclick="toggleRules()" id="rulesToggleBtn">
+Rules: ON
+</button>
 
 <select id="ruleDestination">
   <option value="">Select Destination</option>
@@ -260,6 +266,10 @@ const db = firebase.database();
 let buffer="";
 let timer=null;
 
+/* RULE STATE */
+let rulesEnabled = true;
+let allRulesCache = {};
+
 /* NAV */
 function showPage(p){
 
@@ -274,10 +284,18 @@ function showPage(p){
   if(p==="mobile"){
     document.getElementById("mobilePage").classList.remove("hidden");
 
-    setTimeout(()=>{
-      document.getElementById("mobileScan").focus();
-    },200);
+    // IMPORTANT: no auto keyboard popup
+    enableMobileFocus();
   }
+}
+
+/* MOBILE FOCUS FIX */
+function enableMobileFocus(){
+  const m=document.getElementById("mobileScan");
+
+  document.getElementById("mobilePage").addEventListener("click",()=>{
+    m.focus({preventScroll:true});
+  },{once:true});
 }
 
 /* START */
@@ -285,7 +303,6 @@ auth.onAuthStateChanged(user=>{
   if(user) start();
 });
 
-/* INIT */
 function start(){
 
   loadRules();
@@ -349,7 +366,7 @@ function start(){
   });
 }
 
-/* SCAN (UPDATED: DEST OPTIONAL) */
+/* SCAN */
 function scan(s){
 
   let g="",b="",w=0;
@@ -373,14 +390,13 @@ function scan(s){
   });
 }
 
-/* TABLE */
+/* RENDER TABLE */
 function render(sum){
   const t=document.getElementById("table");
   t.innerHTML="";
 
   Object.values(sum).forEach(i=>{
     const r=t.insertRow();
-
     r.insertCell(0).innerText=i.gmid;
     r.insertCell(1).innerText=i.batch;
     r.insertCell(2).innerText=i.dest;
@@ -403,29 +419,47 @@ function addRule(){
 function loadRules(){
 
   db.ref("rules").on("value",snap=>{
-    const data=snap.val()||{};
-    const table=document.getElementById("rulesTable");
-    table.innerHTML="";
+    allRulesCache=snap.val()||{};
+    renderRules();
+  });
+}
 
-    Object.keys(data).forEach(dest=>{
-      Object.keys(data[dest]).forEach(gmid=>{
+function toggleRules(){
 
-        const row=table.insertRow();
+  rulesEnabled=!rulesEnabled;
 
-        row.insertCell(0).innerText=dest;
-        row.insertCell(1).innerText=gmid;
+  document.getElementById("rulesToggleBtn").innerText=
+    rulesEnabled ? "Rules: ON" : "Rules: OFF";
+}
 
-        const cell=row.insertCell(2);
+function renderRules(){
 
-        const btn=document.createElement("button");
-        btn.innerText="Delete";
+  const table=document.getElementById("rulesTable");
+  const search=(document.getElementById("ruleSearch").value||"").toLowerCase();
 
-        btn.onclick=()=>{
-          db.ref("rules/"+dest+"/"+gmid).remove();
-        };
+  table.innerHTML="";
 
-        cell.appendChild(btn);
-      });
+  Object.keys(allRulesCache).forEach(dest=>{
+    Object.keys(allRulesCache[dest]).forEach(gmid=>{
+
+      if(!dest.toLowerCase().includes(search) &&
+         !gmid.toLowerCase().includes(search)) return;
+
+      const row=table.insertRow();
+
+      row.insertCell(0).innerText=dest;
+      row.insertCell(1).innerText=gmid;
+
+      const cell=row.insertCell(2);
+
+      const btn=document.createElement("button");
+      btn.innerText="Delete";
+
+      btn.onclick=()=>{
+        db.ref("rules/"+dest+"/"+gmid).remove();
+      };
+
+      cell.appendChild(btn);
     });
   });
 }
