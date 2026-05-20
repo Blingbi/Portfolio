@@ -7,10 +7,11 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
 body {
-  font-family: Arial, sans-serif;
+  font-family: Arial;
   background: #0b0f14;
   color: #d7e1ea;
   padding: 20px;
@@ -25,50 +26,42 @@ body {
 
 input {
   width: 100%;
-  padding: 12px;
-  font-size: 16px;
-  margin: 6px 0;
+  padding: 10px;
+  margin: 5px 0;
   background: #0f151c;
-  color: #d7e1ea;
+  color: #fff;
   border: 1px solid #263241;
-  border-radius: 5px;
 }
 
 button {
+  margin-top: 8px;
   padding: 10px;
-  margin-top: 10px;
-  cursor: pointer;
   background: #1f6feb;
   border: none;
   color: white;
-  border-radius: 5px;
-}
-
-button:hover {
-  background: #2b7fff;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 15px;
-  background: #0f151c;
-}
-
-td, th {
-  border: 1px solid #223040;
-  padding: 8px;
-}
-
-th {
-  background: #1a2430;
-  color: #9fd3ff;
+  cursor: pointer;
 }
 
 .status {
   margin-top: 10px;
   font-weight: bold;
   color: #7ee787;
+}
+
+table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+}
+
+td, th {
+  border: 1px solid #223040;
+  padding: 6px;
+}
+
+th {
+  background: #1a2430;
+  color: #9fd3ff;
 }
 </style>
 </head>
@@ -77,23 +70,29 @@ th {
 
 <!-- LOGIN -->
 <div id="loginBox">
-  <h2>Warehouse Login</h2>
+  <h2>Login</h2>
   <input id="email" placeholder="Email">
   <input id="password" type="password" placeholder="Password">
   <button onclick="login()">Login</button>
 </div>
 
 <!-- APP -->
-<div id="app">
+<div id="app" style="display:none;">
 
-<h2>Live Scan Terminal</h2>
+<h2>Warehouse Scanner</h2>
+
+<!-- LOAD INFO -->
+<input id="trailer" placeholder="Trailer Number">
+<input id="delivery" placeholder="Delivery Number">
+<input id="shipment" placeholder="Shipment Number">
+<input id="seal" placeholder="Seal Number">
 
 <input id="scanInput" placeholder="Scan Data Matrix">
 
-<button onclick="logout()">Logout</button>
-<button onclick="exportCSV()">Export CSV</button>
+<button onclick="undoLast()">Undo Last</button>
 <button onclick="resetAll()">Reset</button>
-<button onclick="undoLast()">Undo Last Scan</button>
+<button onclick="exportExcel()">Export Excel</button>
+<button onclick="toggleView()">Toggle Raw / Grouped</button>
 
 <div class="status">
   Total Scanned: <span id="totalCount">0</span>
@@ -117,13 +116,12 @@ th {
 <tbody id="table"></tbody>
 </table>
 
-<audio id="beepSound" src="beep.mp3" preload="auto"></audio>
+<audio id="beepSound" src="beep.mp3"></audio>
 
 </div>
 
 <script>
 
-// Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -144,14 +142,7 @@ let timer = null;
 let appStarted = false;
 
 let lastScanKey = null;
-
-// 🔊 BEEP
-function playBeep() {
-  const beep = document.getElementById("beepSound");
-  beep.volume = 1;
-  beep.currentTime = 0;
-  beep.play().catch(() => {});
-}
+let rawMode = false;
 
 // LOGIN
 function login() {
@@ -159,10 +150,6 @@ function login() {
     document.getElementById("email").value,
     document.getElementById("password").value
   );
-}
-
-function logout() {
-  auth.signOut();
 }
 
 // AUTH
@@ -187,7 +174,6 @@ auth.onAuthStateChanged(user => {
 function startApp() {
 
   const input = document.getElementById("scanInput");
-
   input.focus();
 
   input.addEventListener("input", () => {
@@ -205,12 +191,16 @@ function startApp() {
   db.ref("scans").on("value", snap => {
 
     const data = snap.val() || {};
-    const summary = {};
 
     let total = 0;
     let totalWeight = 0;
 
+    const summary = {};
+
     Object.values(data).forEach(i => {
+
+      total++;
+      totalWeight += i.weight;
 
       const key = i.gmid + "|" + i.batch;
 
@@ -220,15 +210,12 @@ function startApp() {
 
       summary[key].qty++;
       summary[key].weight += i.weight;
-
-      total++;
-      totalWeight += i.weight;
     });
-
-    render(summary);
 
     document.getElementById("totalCount").innerText = total;
     document.getElementById("totalWeight").innerText = totalWeight.toFixed(3);
+
+    render(rawMode ? data : summary);
   });
 }
 
@@ -257,21 +244,17 @@ function processScan(scan) {
     batch,
     weight,
     time: Date.now()
-  })
-  .then(ref => {
+  }).then(ref => {
     lastScanKey = ref.key;
-    playBeep();
   });
 
   document.getElementById("status").innerText =
     `Loaded ${gmid} | ${batch} | ${weight}`;
 }
 
-// UNDO LAST
+// UNDO
 function undoLast() {
-
   if (!lastScanKey) return;
-
   db.ref("scans/" + lastScanKey).remove();
   lastScanKey = null;
 }
@@ -281,8 +264,41 @@ function resetAll() {
   db.ref("scans").remove();
 }
 
-// EXPORT
-function exportCSV() {
+// TOGGLE VIEW
+function toggleView() {
+  rawMode = !rawMode;
+}
+
+// RENDER
+function render(data) {
+
+  const table = document.getElementById("table");
+  table.innerHTML = "";
+
+  if (rawMode) {
+
+    Object.values(data).forEach(i => {
+      const row = table.insertRow();
+      row.insertCell(0).innerText = i.gmid;
+      row.insertCell(1).innerText = i.batch;
+      row.insertCell(2).innerText = 1;
+      row.insertCell(3).innerText = i.weight;
+    });
+
+  } else {
+
+    Object.values(data).forEach(i => {
+      const row = table.insertRow();
+      row.insertCell(0).innerText = i.gmid;
+      row.insertCell(1).innerText = i.batch;
+      row.insertCell(2).innerText = i.qty;
+      row.insertCell(3).innerText = i.weight.toFixed(3);
+    });
+  }
+}
+
+// EXPORT EXCEL
+function exportExcel() {
 
   db.ref("scans").once("value").then(snap => {
 
@@ -301,19 +317,33 @@ function exportCSV() {
       summary[key].weight += i.weight;
     });
 
-    let csv = "GMID,Batch,Qty,Weight\n";
+    const trailer = document.getElementById("trailer").value || "";
+    const delivery = document.getElementById("delivery").value || "";
+    const shipment = document.getElementById("shipment").value || "";
+    const seal = document.getElementById("seal").value || "";
 
-    Object.values(summary).forEach(i => {
-      csv += `${i.gmid},${i.batch},${i.qty},${i.weight.toFixed(3)}\n`;
-    });
+    const header = [
+      ["TRAILER", trailer],
+      ["DELIVERY", delivery],
+      ["SHIPMENT", shipment],
+      ["SEAL", seal],
+      [""],
+      ["GMID", "Batch", "Qty", "Weight"]
+    ];
 
-    const blob = new Blob([csv], {type:"text/csv"});
-    const url = URL.createObjectURL(blob);
+    const rows = Object.values(summary).map(i => [
+      i.gmid,
+      i.batch,
+      i.qty,
+      i.weight.toFixed(3)
+    ]);
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "warehouse.csv";
-    a.click();
+    const ws = XLSX.utils.aoa_to_sheet(header.concat(rows));
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Load");
+
+    XLSX.writeFile(wb, `LOAD_${trailer || "EXPORT"}.xlsx`);
   });
 }
 
