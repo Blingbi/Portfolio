@@ -95,7 +95,6 @@ th{
 
 .hidden{display:none;}
 
-/* MOBILE */
 #mobilePage{
   padding:0;
 }
@@ -132,7 +131,6 @@ th{
 
 <body>
 
-<!-- NAV -->
 <div id="nav">
   <div class="navItem active" onclick="showPage('scanner')">Scanner</div>
   <div class="navItem" onclick="showPage('rules')">Rules</div>
@@ -156,7 +154,6 @@ th{
 
 <input id="scanInput" placeholder="Scan Data Matrix">
 
-<!-- RULE TOGGLE MOVED HERE -->
 <button onclick="toggleRules()" id="rulesToggleBtn">Rules: ON</button>
 
 <div class="status">
@@ -192,7 +189,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 </div>
 </div>
 
-<!-- RULES PAGE -->
+<!-- RULES -->
 <div id="rulesPage" class="hidden">
 
 <div class="card">
@@ -248,6 +245,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 
 <script>
 
+/* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -260,11 +258,24 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
+/* AUDIO */
+const successBeep = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+const errorBeep = new Audio("ErrorBeep.mp3");
+
+/* STATE */
 let buffer="";
 let timer=null;
-
 let allRulesCache={};
 let rulesEnabled=true;
+
+/* ERROR HANDLER */
+function playError(msg){
+  errorBeep.currentTime = 0;
+  errorBeep.play();
+
+  document.getElementById("status").innerText = msg;
+  document.getElementById("status").style.color = "#ff6b6b";
+}
 
 /* NAV */
 function showPage(p){
@@ -275,10 +286,7 @@ function showPage(p){
 
   if(p==="scanner") document.getElementById("scannerPage").classList.remove("hidden");
   if(p==="rules") document.getElementById("rulesPage").classList.remove("hidden");
-
-  if(p==="mobile"){
-    document.getElementById("mobilePage").classList.remove("hidden");
-  }
+  if(p==="mobile") document.getElementById("mobilePage").classList.remove("hidden");
 }
 
 /* START */
@@ -290,28 +298,24 @@ function start(){
 
   loadRules();
 
-  const input=document.getElementById("scanInput");
-
-  input.addEventListener("input",()=>{
-    buffer=input.value;
+  document.getElementById("scanInput").addEventListener("input",e=>{
+    buffer=e.target.value;
     clearTimeout(timer);
 
     timer=setTimeout(()=>{
       if(buffer.length>10) scan(buffer);
-      input.value="";
+      e.target.value="";
       buffer="";
     },100);
   });
 
-  const mobileInput=document.getElementById("mobileScan");
-
-  mobileInput.addEventListener("input",()=>{
-    buffer=mobileInput.value;
+  document.getElementById("mobileScan").addEventListener("input",e=>{
+    buffer=e.target.value;
     clearTimeout(timer);
 
     timer=setTimeout(()=>{
       if(buffer.length>10) scan(buffer);
-      mobileInput.value="";
+      e.target.value="";
       buffer="";
     },100);
   });
@@ -349,7 +353,7 @@ function start(){
   });
 }
 
-/* SCAN — ONLY RULE LOGIC MODIFIED */
+/* SCAN */
 function scan(s){
 
   let g="",b="",w=0;
@@ -360,14 +364,14 @@ function scan(s){
     if(p.startsWith("3103")) w=parseInt(p.slice(4))/1000;
   }
 
-  if(!g||!b||!w) return;
+  if(!g||!b||!w){
+    playError("INVALID BARCODE");
+    return;
+  }
 
   const dest=document.getElementById("destinationSelect").value || "UNASSIGNED";
 
-  /* =========================
-     RULE CHECK (ADDED ONLY)
-     ========================= */
-
+  /* RULE CHECK */
   if(rulesEnabled && allRulesCache){
 
     for(let d in allRulesCache){
@@ -375,18 +379,13 @@ function scan(s){
 
         if(d !== dest){
 
-          document.getElementById("status").innerText =
-            "RULE VIOLATION: " + g + " must go to " + d;
-
-          document.getElementById("status").style.color = "#ff6b6b";
-
+          playError("RULE VIOLATION: " + g + " must go to " + d);
           return;
         }
       }
     }
   }
 
-  /* EXISTING PUSH */
   db.ref("scans").push({
     gmid:g,
     batch:b,
@@ -394,6 +393,9 @@ function scan(s){
     dest:dest,
     time:Date.now()
   });
+
+  successBeep.currentTime = 0;
+  successBeep.play();
 }
 
 /* RENDER */
@@ -413,9 +415,8 @@ function render(sum){
   });
 }
 
-/* RULE TOGGLE */
+/* RULES */
 function toggleRules(){
-
   rulesEnabled=!rulesEnabled;
 
   const btn=document.getElementById("rulesToggleBtn");
@@ -426,7 +427,6 @@ function toggleRules(){
   status.style.color = rulesEnabled ? "#7ee787" : "#ff6b6b";
 }
 
-/* RULES DATA */
 function addRule(){
   const d=document.getElementById("ruleDestination").value;
   const g=document.getElementById("ruleGMID").value.trim();
@@ -440,58 +440,7 @@ function loadRules(){
     renderRules();
   });
 }
-function resetAll(){
 
-  if(!confirm("Clear ALL scans?")) return;
-
-  db.ref("scans").remove().then(()=>{
-
-    document.getElementById("status").innerText = "All scans cleared";
-    document.getElementById("status").style.color = "#7ee787";
-
-  });
-}
-function exportExcel(){
-
-  db.ref("scans").once("value").then(snap=>{
-
-    const data = snap.val() || {};
-    const summary = {};
-
-    Object.values(data).forEach(i => {
-
-      const key = (i.gmid || "") + "|" + (i.batch || "") + "|" + (i.dest || "UNASSIGNED");
-
-      if(!summary[key]){
-        summary[key] = {
-          GMID: i.gmid || "",
-          Batch: i.batch || "",
-          Destination: i.dest || "UNASSIGNED",
-          Qty: 0,
-          Weight: 0
-        };
-      }
-
-      summary[key].Qty += 1;
-      summary[key].Weight += (i.weight || 0);
-    });
-
-    const rows = Object.values(summary).map(i => ({
-      GMID: i.GMID,
-      Batch: i.Batch,
-      Destination: i.Destination,
-      Qty: i.Qty,
-      Weight: Number(i.Weight.toFixed(3))
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(wb, ws, "Warehouse");
-
-    XLSX.writeFile(wb, "warehouse_export.xlsx");
-  });
-}
 function renderRules(){
 
   const table=document.getElementById("rulesTable");
