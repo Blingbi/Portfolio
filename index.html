@@ -36,14 +36,13 @@ body{
 
 .navItem.active{background:#1f6feb;}
 
-/* MAIN WRAPPER FIX (THIS WAS THE ISSUE) */
+/* LAYOUT */
 .container{
   padding:20px;
   max-width:1200px;
-  margin:0 auto;
+  margin:auto;
 }
 
-/* CARD */
 .card{
   background:#121a22;
   padding:15px;
@@ -62,7 +61,7 @@ input,select{
   box-sizing:border-box;
 }
 
-/* BUTTONS */
+/* BUTTON */
 button{
   padding:10px;
   margin-top:8px;
@@ -82,18 +81,17 @@ button{
 
 .error{color:#ff6b6b;}
 
-/* TABLE FIX (MAIN FIX HERE) */
+/* TABLE FIX */
 table{
   width:100%;
   border-collapse:collapse;
   margin-top:15px;
-  table-layout:fixed; /* prevents scrunching */
+  table-layout:fixed;
 }
 
 th,td{
   border:1px solid #223040;
   padding:10px;
-  text-align:left;
   word-wrap:break-word;
 }
 
@@ -102,13 +100,14 @@ th{
   color:#9fd3ff;
 }
 
-/* MOBILE VIEW */
+/* HIDE */
 .hidden{display:none;}
 
+/* MOBILE */
 .bigNumber{
-  font-size:64px;
-  text-align:center;
+  font-size:60px;
   font-weight:bold;
+  text-align:center;
 }
 
 .bigLabel{
@@ -129,7 +128,7 @@ th{
 <div id="nav">
   <div class="navItem active" onclick="showPage('scanner')">Scanner</div>
   <div class="navItem" onclick="showPage('rules')">Rules</div>
-  <div class="navItem" onclick="showPage('mobile')">Mobile View</div>
+  <div class="navItem" onclick="showPage('mobile')">Mobile</div>
 </div>
 
 <div class="container">
@@ -176,6 +175,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 
 <!-- RULES -->
 <div id="rulesPage" class="hidden">
+
 <div class="card">
 
 <h3>Rules</h3>
@@ -193,6 +193,13 @@ Total Weight: <span id="totalWeight">0.000</span>
 <button onclick="addRule()">Add Rule</button>
 
 <table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>GMID</th>
+<th>Delete</th>
+</tr>
+</thead>
 <tbody id="rulesTable"></tbody>
 </table>
 
@@ -201,6 +208,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 
 <!-- MOBILE -->
 <div id="mobilePage" class="hidden">
+
 <div class="card mobileBox">
 
 <div class="bigLabel">TOTAL SCANNED</div>
@@ -214,25 +222,26 @@ Total Weight: <span id="totalWeight">0.000</span>
 
 </div>
 
-<audio id="beepSound" src="beep.mp3"></audio>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
 <script>
 
 const firebaseConfig = {
-  apiKey:"AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
-  authDomain:"warehouse-scanner-1b6bc.firebaseapp.com",
-  databaseURL:"https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com",
-  projectId:"warehouse-scanner-1b6bc"
+  apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
+  authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
+  databaseURL: "https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com",
+  projectId: "warehouse-scanner-1b6bc",
 };
 
 firebase.initializeApp(firebaseConfig);
 
-const auth=firebase.auth();
-const db=firebase.database();
+const auth = firebase.auth();
+const db = firebase.database();
 
 let buffer="";
 let timer=null;
 
+/* NAV */
 function showPage(p){
 
   document.getElementById("scannerPage").classList.add("hidden");
@@ -244,13 +253,15 @@ function showPage(p){
   if(p==="mobile") document.getElementById("mobilePage").classList.remove("hidden");
 }
 
+/* START */
 auth.onAuthStateChanged(user=>{
-  if(user){
-    start();
-  }
+  if(user) start();
 });
 
+/* INIT */
 function start(){
+
+  loadRules(); // IMPORTANT FIX
 
   const input=document.getElementById("scanInput");
 
@@ -277,7 +288,7 @@ function start(){
     Object.values(data).forEach(i=>{
       total++;
       weight+=i.weight;
-      last=i.gmid+" | "+i.batch;
+      last=`${i.gmid} | ${i.batch}`;
 
       const k=i.gmid+"|"+i.batch;
 
@@ -298,6 +309,7 @@ function start(){
   });
 }
 
+/* SCAN */
 function scan(s){
 
   let g="",b="",w=0;
@@ -309,7 +321,6 @@ function scan(s){
   }
 
   if(!g||!b||!w){
-    beep();
     return;
   }
 
@@ -319,20 +330,12 @@ function scan(s){
     weight:w,
     time:Date.now()
   });
-
-  beep();
 }
 
-function beep(){
-  const b=document.getElementById("beepSound");
-  b.currentTime=0;
-  b.play().catch(()=>{});
-}
-
+/* TABLE */
 function render(sum){
   const t=document.getElementById("table");
   t.innerHTML="";
-
   Object.values(sum).forEach(i=>{
     const r=t.insertRow();
     r.insertCell(0).innerText=i.gmid;
@@ -342,7 +345,53 @@ function render(sum){
   });
 }
 
-function addRule(){}
+/* ADD RULE (FIXED) */
+function addRule(){
+
+  const d=document.getElementById("ruleDestination").value;
+  const g=document.getElementById("ruleGMID").value.trim();
+
+  if(!d||!g) return;
+
+  db.ref("rules/"+d+"/"+g).set(true)
+    .then(()=>{
+      document.getElementById("ruleGMID").value="";
+    })
+    .catch(err=>{
+      console.error(err);
+    });
+}
+
+/* LOAD + DELETE RULES */
+function loadRules(){
+
+  db.ref("rules").on("value",snap=>{
+    const data=snap.val()||{};
+    const table=document.getElementById("rulesTable");
+    table.innerHTML="";
+
+    Object.keys(data).forEach(dest=>{
+      Object.keys(data[dest]).forEach(gmid=>{
+
+        const row=table.insertRow();
+
+        row.insertCell(0).innerText=dest;
+        row.insertCell(1).innerText=gmid;
+
+        const cell=row.insertCell(2);
+
+        const btn=document.createElement("button");
+        btn.innerText="Delete";
+
+        btn.onclick=()=>{
+          db.ref("rules/"+dest+"/"+gmid).remove();
+        };
+
+        cell.appendChild(btn);
+      });
+    });
+  });
+}
 
 </script>
 
