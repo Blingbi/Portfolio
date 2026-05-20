@@ -70,10 +70,6 @@ th {
   font-weight: bold;
   color: #7ee787;
 }
-
-.error {
-  color: #ff5c5c;
-}
 </style>
 </head>
 
@@ -85,7 +81,6 @@ th {
   <input id="email" placeholder="Email">
   <input id="password" type="password" placeholder="Password">
   <button onclick="login()">Login</button>
-  <div id="loginStatus"></div>
 </div>
 
 <!-- APP -->
@@ -98,9 +93,14 @@ th {
 <button onclick="logout()">Logout</button>
 <button onclick="exportCSV()">Export CSV</button>
 <button onclick="resetAll()">Reset</button>
+<button onclick="undoLast()">Undo Last Scan</button>
 
 <div class="status">
   Total Scanned: <span id="totalCount">0</span>
+</div>
+
+<div class="status">
+  Total Weight: <span id="totalWeight">0.000</span>
 </div>
 
 <div class="status" id="status"></div>
@@ -143,48 +143,29 @@ let buffer = "";
 let timer = null;
 let appStarted = false;
 
-// 🔊 SUCCESS BEEP
+let lastScanKey = null;
+
+// 🔊 BEEP
 function playBeep() {
   const beep = document.getElementById("beepSound");
-  if (!beep) return;
-
-  beep.volume = 1.0;
+  beep.volume = 1;
   beep.currentTime = 0;
   beep.play().catch(() => {});
-}
-
-// 🔊 ERROR DOUBLE BEEP
-function playErrorBeep() {
-  const beep = document.getElementById("beepSound");
-  if (!beep) return;
-
-  beep.volume = 1.0;
-
-  beep.currentTime = 0;
-  beep.play().catch(() => {});
-
-  setTimeout(() => {
-    beep.currentTime = 0;
-    beep.play().catch(() => {});
-  }, 180);
 }
 
 // LOGIN
 function login() {
-  const email = document.getElementById("email").value;
-  const pass = document.getElementById("password").value;
-
-  auth.signInWithEmailAndPassword(email, pass)
-    .catch(err => {
-      document.getElementById("loginStatus").innerText = err.message;
-    });
+  auth.signInWithEmailAndPassword(
+    document.getElementById("email").value,
+    document.getElementById("password").value
+  );
 }
 
 function logout() {
   auth.signOut();
 }
 
-// AUTH FIXED
+// AUTH
 auth.onAuthStateChanged(user => {
 
   if (user) {
@@ -202,7 +183,7 @@ auth.onAuthStateChanged(user => {
   }
 });
 
-// APP
+// START
 function startApp() {
 
   const input = document.getElementById("scanInput");
@@ -212,7 +193,6 @@ function startApp() {
   input.addEventListener("input", () => {
 
     buffer = input.value;
-
     clearTimeout(timer);
 
     timer = setTimeout(() => {
@@ -228,6 +208,7 @@ function startApp() {
     const summary = {};
 
     let total = 0;
+    let totalWeight = 0;
 
     Object.values(data).forEach(i => {
 
@@ -240,13 +221,14 @@ function startApp() {
       summary[key].qty++;
       summary[key].weight += i.weight;
 
-      total++; // ✅ TRUE SOURCE OF COUNT
+      total++;
+      totalWeight += i.weight;
     });
 
     render(summary);
 
-    // 🔥 FIXED TOTAL COUNTER
     document.getElementById("totalCount").innerText = total;
+    document.getElementById("totalWeight").innerText = totalWeight.toFixed(3);
   });
 }
 
@@ -260,14 +242,12 @@ function processScan(scan) {
   const parts = scan.split(";");
 
   for (let p of parts) {
-
     if (p.startsWith("0100")) gmid = p.slice(-7);
     else if (p.startsWith("10")) batch = p.substring(2);
     else if (p.startsWith("3103")) weight = parseInt(p.substring(4)) / 1000;
   }
 
   if (!gmid || !batch || !weight) {
-    playErrorBeep();
     document.getElementById("status").innerText = "INVALID SCAN";
     return;
   }
@@ -278,7 +258,8 @@ function processScan(scan) {
     weight,
     time: Date.now()
   })
-  .then(() => {
+  .then(ref => {
+    lastScanKey = ref.key;
     playBeep();
   });
 
@@ -286,27 +267,18 @@ function processScan(scan) {
     `Loaded ${gmid} | ${batch} | ${weight}`;
 }
 
-// RENDER
-function render(summary) {
+// UNDO LAST
+function undoLast() {
 
-  const table = document.getElementById("table");
-  table.innerHTML = "";
+  if (!lastScanKey) return;
 
-  Object.values(summary).forEach(i => {
-
-    const row = table.insertRow();
-
-    row.insertCell(0).innerText = i.gmid;
-    row.insertCell(1).innerText = i.batch;
-    row.insertCell(2).innerText = i.qty;
-    row.insertCell(3).innerText = i.weight.toFixed(3);
-  });
+  db.ref("scans/" + lastScanKey).remove();
+  lastScanKey = null;
 }
 
 // RESET
 function resetAll() {
   db.ref("scans").remove();
-  document.getElementById("status").innerText = "";
 }
 
 // EXPORT
