@@ -141,7 +141,6 @@ const db = firebase.database();
 
 let buffer = "";
 let timer = null;
-let totalCount = 0;
 let appStarted = false;
 
 // 🔊 SUCCESS BEEP
@@ -203,7 +202,7 @@ auth.onAuthStateChanged(user => {
   }
 });
 
-// APP START
+// APP
 function startApp() {
 
   const input = document.getElementById("scanInput");
@@ -228,6 +227,8 @@ function startApp() {
     const data = snap.val() || {};
     const summary = {};
 
+    let total = 0;
+
     Object.values(data).forEach(i => {
 
       const key = i.gmid + "|" + i.batch;
@@ -238,13 +239,18 @@ function startApp() {
 
       summary[key].qty++;
       summary[key].weight += i.weight;
+
+      total++; // ✅ TRUE SOURCE OF COUNT
     });
 
     render(summary);
+
+    // 🔥 FIXED TOTAL COUNTER
+    document.getElementById("totalCount").innerText = total;
   });
 }
 
-// SCAN PROCESS
+// SCAN
 function processScan(scan) {
 
   let gmid = "";
@@ -260,7 +266,6 @@ function processScan(scan) {
     else if (p.startsWith("3103")) weight = parseInt(p.substring(4)) / 1000;
   }
 
-  // INVALID SCAN
   if (!gmid || !batch || !weight) {
     playErrorBeep();
     document.getElementById("status").innerText = "INVALID SCAN";
@@ -275,8 +280,6 @@ function processScan(scan) {
   })
   .then(() => {
     playBeep();
-    totalCount++;
-    document.getElementById("totalCount").innerText = totalCount;
   });
 
   document.getElementById("status").innerText =
@@ -303,8 +306,6 @@ function render(summary) {
 // RESET
 function resetAll() {
   db.ref("scans").remove();
-  totalCount = 0;
-  document.getElementById("totalCount").innerText = "0";
   document.getElementById("status").innerText = "";
 }
 
