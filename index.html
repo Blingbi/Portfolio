@@ -6,39 +6,97 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@18.5/dist/xlsx.full.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
-body{margin:0;font-family:Arial;background:#0b0f14;color:#d7e1ea}
-#nav{display:flex;background:#121a22;padding:10px;gap:10px}
-.navItem{padding:8px 12px;background:#1a2430;cursor:pointer;border-radius:6px}
-.navItem.active{background:#1f6feb}
+
+body{
+  margin:0;
+  font-family:Arial;
+  background:#0b0f14;
+  color:#d7e1ea;
+}
+
+#nav{
+  display:flex;
+  background:#121a22;
+  padding:10px;
+  gap:10px;
+  border-bottom:1px solid #1f2a36;
+}
+
+.navItem{
+  padding:8px 12px;
+  background:#1a2430;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.navItem.active{background:#1f6feb;}
+
 .container{padding:20px}
 
 .hidden{display:none}
 
-input,select{width:100%;padding:10px;margin:5px 0}
+input,select{
+  width:100%;
+  padding:10px;
+  margin:5px 0;
+  background:#0f151c;
+  color:white;
+  border:1px solid #263241;
+  box-sizing:border-box;
+}
 
-#gunScan,#mobileGun{
+button{
+  padding:10px;
+  margin-top:8px;
+  background:#1f6feb;
+  border:none;
+  color:white;
+  border-radius:6px;
+}
+
+.status{color:#7ee787;margin-top:10px}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:15px;
+}
+
+th,td{
+  border:1px solid #223040;
+  padding:8px;
+}
+
+/* IMPORTANT: prevents keyboard focus behavior */
+input[readonly]{
+  caret-color: transparent;
+}
+
+#gunScan, #mobileGun{
   position:absolute;
   left:-9999px;
 }
 
-.big{
-  font-size:90px;
-  font-weight:900;
+.mobileBox{
   text-align:center;
+  padding:20px;
 }
 
-.small{
-  text-align:center;
-  opacity:0.7;
+.big{
+  font-size:80px;
+  font-weight:900;
 }
+
 </style>
 </head>
 
 <body>
 
+<!-- NAV -->
 <div id="nav">
   <div class="navItem" onclick="show('scanner')">Scanner</div>
   <div class="navItem" onclick="show('mobile')">Mobile</div>
@@ -57,10 +115,11 @@ input,select{width:100%;padding:10px;margin:5px 0}
   <option>Kville</option>
 </select>
 
-<input id="gunScan">
+<!-- READONLY = NO KEYBOARD -->
+<input id="gunScan" readonly>
 
 <div class="big" id="total">0</div>
-<div class="small">TOTAL SCANNED</div>
+<div class="status">TOTAL SCANNED</div>
 
 </div>
 
@@ -68,9 +127,10 @@ input,select{width:100%;padding:10px;margin:5px 0}
 <div id="mobile" class="hidden">
 
 <div class="big" id="mTotal">0</div>
-<div class="small">MOBILE TOTAL</div>
+<div class="status">MOBILE TOTAL</div>
 
-<input id="mobileGun">
+<!-- READONLY = NO KEYBOARD -->
+<input id="mobileGun" readonly>
 
 </div>
 
@@ -82,23 +142,23 @@ const db = firebase.initializeApp({
   databaseURL:"https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com"
 }).database();
 
-let scanLock = {key:"",time:0};
+let buffer1="", buffer2="";
+let timer1, timer2;
+
+let lastKey="";
+let lastTime=0;
 
 /* NAV */
 function show(page){
+
   document.getElementById("scanner").classList.add("hidden");
   document.getElementById("mobile").classList.add("hidden");
 
   document.getElementById(page).classList.remove("hidden");
-
-  setTimeout(()=>{
-    if(page==="scanner") document.getElementById("gunScan").focus();
-    if(page==="mobile") document.getElementById("mobileGun").focus();
-  },150);
 }
 
 /* CORE SCAN */
-function handleScan(raw){
+function processScan(raw){
 
   let g="",b="",w=0;
 
@@ -113,49 +173,54 @@ function handleScan(raw){
   let key=g+"|"+b;
   let now=Date.now();
 
-  if(scanLock.key===key && now-scanLock.time<900) return;
+  if(key===lastKey && now-lastTime<900) return;
 
-  scanLock={key,time:now};
+  lastKey=key;
+  lastTime=now;
 
   db.ref("scans").push({
     gmid:g,
     batch:b,
     weight:w,
-    dest:document.getElementById("dest")?.value||"UNASSIGNED",
+    dest:document.getElementById("dest").value||"UNASSIGNED",
     time:now
   });
 }
 
 /* SCANNER INPUT */
-let b1="",t1;
 document.getElementById("gunScan").addEventListener("input",e=>{
-  b1=e.target.value;
-  clearTimeout(t1);
+  buffer1=e.target.value;
+  clearTimeout(timer1);
 
-  t1=setTimeout(()=>{
-    handleScan(b1);
+  timer1=setTimeout(()=>{
+    processScan(buffer1);
     e.target.value="";
-  },60);
+
+    // IMPORTANT: prevents keyboard popup loop
+    e.target.blur();
+  },50);
 });
 
-/* MOBILE INPUT (SEPARATE BUFFER — THIS IS THE FIX) */
-let b2="",t2;
+/* MOBILE INPUT */
 document.getElementById("mobileGun").addEventListener("input",e=>{
-  b2=e.target.value;
-  clearTimeout(t2);
+  buffer2=e.target.value;
+  clearTimeout(timer2);
 
-  t2=setTimeout(()=>{
-    handleScan(b2);
+  timer2=setTimeout(()=>{
+    processScan(buffer2);
     e.target.value="";
-  },60);
+
+    // IMPORTANT: prevents keyboard popup loop
+    e.target.blur();
+  },50);
 });
 
 /* LIVE TOTALS */
 db.ref("scans").on("value",snap=>{
-  let d=snap.val()||{};
+  let data=snap.val()||{};
   let c=0;
 
-  Object.values(d).forEach(()=>c++);
+  Object.values(data).forEach(()=>c++);
 
   document.getElementById("total").innerText=c;
   document.getElementById("mTotal").innerText=c;
