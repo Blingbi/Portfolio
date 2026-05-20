@@ -15,16 +15,40 @@ body{
   font-family:Arial;
   background:#0b0f14;
   color:#d7e1ea;
-  padding:20px;
+  margin:0;
 }
 
-#app,#loginBox{
+/* NAV */
+#nav{
+  display:flex;
+  background:#121a22;
+  border-bottom:1px solid #1f2a36;
+  padding:10px;
+  gap:10px;
+  align-items:center;
+}
+
+.navItem{
+  padding:8px 12px;
+  cursor:pointer;
+  border-radius:6px;
+  background:#1a2430;
+}
+
+.navItem:hover{background:#243244;}
+.navItem.active{background:#1f6feb;}
+
+/* LAYOUT */
+.container{padding:20px;}
+
+.card{
   background:#121a22;
   padding:15px;
   border-radius:8px;
   border:1px solid #1f2a36;
 }
 
+/* INPUTS */
 input,select{
   width:100%;
   padding:10px;
@@ -34,6 +58,7 @@ input,select{
   border:1px solid #263241;
 }
 
+/* BUTTONS */
 button{
   padding:10px;
   margin-top:8px;
@@ -41,48 +66,42 @@ button{
   border:none;
   color:white;
   cursor:pointer;
+  border-radius:6px;
 }
 
-button:hover{
-  background:#2b7fff;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:10px;
-}
-
-td,th{
-  border:1px solid #223040;
-  padding:6px;
-}
-
-th{
-  background:#1a2430;
-  color:#9fd3ff;
-}
-
+/* STATUS */
 .status{
   margin-top:10px;
-  font-weight:bold;
   color:#7ee787;
+  font-weight:bold;
 }
 
-.error{
-  color:#ff6b6b;
+.error{color:#ff6b6b;}
+
+/* HIDDEN */
+.hidden{display:none;}
+
+/* MOBILE VIEW */
+.bigNumber{
+  font-size:60px;
+  font-weight:bold;
+  text-align:center;
+  margin:20px 0;
 }
 
-.tab{
-  display:none;
+.bigLabel{
+  text-align:center;
+  font-size:18px;
+  opacity:0.8;
 }
 
-.tab.active{
-  display:block;
+.mobileBox{
+  text-align:center;
 }
 
-.navBtn{
-  margin-right:5px;
+.mobileScan{
+  font-size:22px;
+  padding:18px;
 }
 
 </style>
@@ -91,42 +110,46 @@ th{
 <body>
 
 <!-- LOGIN -->
-<div id="loginBox">
-  <h2>Warehouse Login</h2>
-
-  <input id="email" placeholder="Email">
-  <input id="password" type="password" placeholder="Password">
-
-  <button onclick="login()">Login</button>
+<div id="loginBox" class="container">
+  <div class="card">
+    <h2>Login</h2>
+    <input id="email" placeholder="Email">
+    <input id="password" type="password">
+    <button onclick="login()">Login</button>
+  </div>
 </div>
 
 <!-- APP -->
-<div id="app" style="display:none;">
+<div id="app" class="hidden">
 
-<h2>Warehouse Scanner</h2>
+<!-- NAV -->
+<div id="nav">
+  <div class="navItem active" onclick="showPage('scanner')">Scanner</div>
+  <div class="navItem" onclick="showPage('rules')">Rules</div>
+  <div class="navItem" onclick="showPage('mobile')">Mobile View</div>
 
-<button onclick="showTab('scannerTab')">Scanner</button>
-<button onclick="showTab('rulesTab')">Rules</button>
+  <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
+    <span>Rules:</span>
+    <button onclick="toggleRules()" id="rulesBtn">OFF</button>
+  </div>
+</div>
+
+<div class="container">
 
 <!-- SCANNER -->
-<div id="scannerTab" class="tab active">
+<div id="scannerPage">
+
+<div class="card">
 
 <select id="destinationSelect">
   <option value="">Select Destination</option>
+  <option value="CENTRAL">Central</option>
+  <option value="CDW">CDW</option>
+  <option value="INTERPLANT">Interplant</option>
+  <option value="KVILLE">Kville</option>
 </select>
 
-<button onclick="toggleRules()">Toggle Rule Validation</button>
-
-<div class="status">
-Rules:
-<span id="rulesStatus">OFF</span>
-</div>
-
 <input id="scanInput" placeholder="Scan Data Matrix">
-
-<button onclick="undoLast()">Undo Last</button>
-<button onclick="resetAll()">Reset</button>
-<button onclick="exportExcel()">Export Excel</button>
 
 <div class="status">
 Total Scanned: <span id="totalCount">0</span>
@@ -151,35 +174,49 @@ Total Weight: <span id="totalWeight">0.000</span>
 </table>
 
 </div>
+</div>
 
 <!-- RULES -->
-<div id="rulesTab" class="tab">
+<div id="rulesPage" class="hidden">
+<div class="card">
 
-<h3>Rules Editor</h3>
-
-<input id="newDestination" placeholder="Add Destination">
-<button onclick="addDestination()">Add Destination</button>
-
-<hr>
+<h3>Rules</h3>
 
 <select id="ruleDestination">
   <option value="">Select Destination</option>
+  <option value="CENTRAL">Central</option>
+  <option value="CDW">CDW</option>
+  <option value="INTERPLANT">Interplant</option>
+  <option value="KVILLE">Kville</option>
 </select>
 
-<input id="ruleGMID" placeholder="Add Allowed GMID">
+<input id="ruleGMID" placeholder="GMID">
+
 <button onclick="addRule()">Add Rule</button>
 
 <table>
-<thead>
-<tr>
-<th>Destination</th>
-<th>GMID</th>
-<th>Remove</th>
-</tr>
-</thead>
-
 <tbody id="rulesTable"></tbody>
 </table>
+
+</div>
+</div>
+
+<!-- MOBILE VIEW -->
+<div id="mobilePage" class="hidden">
+
+<div class="card mobileBox">
+
+<div class="bigLabel">TOTAL SCANNED</div>
+<div class="bigNumber" id="mTotal">0</div>
+
+<div class="bigLabel">LAST SCAN</div>
+<div class="status" id="lastScan">None</div>
+
+<input id="mobileScan" class="mobileScan" placeholder="SCAN HERE">
+
+</div>
+
+</div>
 
 </div>
 
@@ -189,7 +226,6 @@ Total Weight: <span id="totalWeight">0.000</span>
 
 <script>
 
-// FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -205,11 +241,10 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
-let buffer = "";
-let timer = null;
-let appStarted = false;
-let lastScanKey = null;
-let rulesEnabled = false;
+let buffer="";
+let timer=null;
+let rulesEnabled=false;
+let lastScanKey=null;
 
 // LOGIN
 function login(){
@@ -222,73 +257,74 @@ function login(){
 // AUTH
 auth.onAuthStateChanged(user=>{
   if(user){
-    document.getElementById("loginBox").style.display="none";
-    document.getElementById("app").style.display="block";
-
-    if(!appStarted){
-      startApp();
-      appStarted=true;
-    }
-  }else{
-    document.getElementById("loginBox").style.display="block";
-    document.getElementById("app").style.display="none";
+    document.getElementById("loginBox").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    startApp();
   }
 });
 
-// TABS
-function showTab(id){
-  document.querySelectorAll(".tab")
-    .forEach(t=>t.classList.remove("active"));
+// NAV
+function showPage(page){
 
-  document.getElementById(id).classList.add("active");
+  document.getElementById("scannerPage").classList.add("hidden");
+  document.getElementById("rulesPage").classList.add("hidden");
+  document.getElementById("mobilePage").classList.add("hidden");
+
+  document.querySelectorAll(".navItem")
+    .forEach(n=>n.classList.remove("active"));
+
+  if(page==="scanner"){
+    document.getElementById("scannerPage").classList.remove("hidden");
+    document.querySelectorAll(".navItem")[0].classList.add("active");
+  }
+
+  if(page==="rules"){
+    document.getElementById("rulesPage").classList.remove("hidden");
+    document.querySelectorAll(".navItem")[1].classList.add("active");
+  }
+
+  if(page==="mobile"){
+    document.getElementById("mobilePage").classList.remove("hidden");
+    document.querySelectorAll(".navItem")[2].classList.add("active");
+
+    document.getElementById("mobileScan").focus();
+  }
 }
 
 // START
 function startApp(){
 
-  loadDestinations();
-  loadRules();
-
   const input=document.getElementById("scanInput");
-  input.focus();
 
   input.addEventListener("input",()=>{
-
     buffer=input.value;
     clearTimeout(timer);
 
     timer=setTimeout(()=>{
-      if(buffer.length>10){
-        processScan(buffer);
-      }
+      if(buffer.length>10) processScan(buffer);
       input.value="";
       buffer="";
-    },120);
+    },100);
   });
 
   db.ref("scans").on("value",snap=>{
 
-    const data=snap.val() || {};
-
+    const data=snap.val()||{};
     const summary={};
 
     let total=0;
     let totalWeight=0;
+    let last="None";
 
     Object.values(data).forEach(i=>{
-
       total++;
       totalWeight+=i.weight;
+      last=`${i.gmid} | ${i.batch}`;
 
       const key=i.gmid+"|"+i.batch;
 
       if(!summary[key]){
-        summary[key]={
-          gmid:i.gmid,
-          batch:i.batch,
-          qty:0,
-          weight:0
-        };
+        summary[key]={gmid:i.gmid,batch:i.batch,qty:0,weight:0};
       }
 
       summary[key].qty++;
@@ -298,16 +334,17 @@ function startApp(){
     document.getElementById("totalCount").innerText=total;
     document.getElementById("totalWeight").innerText=totalWeight.toFixed(3);
 
+    document.getElementById("mTotal").innerText=total;
+    document.getElementById("lastScan").innerText=last;
+
     render(summary);
   });
 }
 
 // SCAN
-async function processScan(scan){
+function processScan(scan){
 
-  let gmid="";
-  let batch="";
-  let weight=0;
+  let gmid="",batch="",weight=0;
 
   const parts=scan.split(";");
 
@@ -317,50 +354,22 @@ async function processScan(scan){
     else if(p.startsWith("3103")) weight=parseInt(p.substring(4))/1000;
   }
 
-  if(!gmid || !batch || !weight){
+  if(!gmid||!batch||!weight){
     errorBeep();
-    document.getElementById("status").innerHTML=
-      `<span class="error">INVALID SCAN</span>`;
     return;
   }
 
-  const destination=document.getElementById("destinationSelect").value;
-
-  if(!destination){
+  const dest=document.getElementById("destinationSelect").value;
+  if(!dest){
     errorBeep();
-    document.getElementById("status").innerHTML=
-      `<span class="error">SELECT DESTINATION</span>`;
     return;
-  }
-
-  if(rulesEnabled){
-
-    const ruleSnap=
-      await db.ref("rules/"+destination+"/"+gmid).once("value");
-
-    if(!ruleSnap.exists()){
-      errorBeep();
-      document.getElementById("status").innerHTML=
-        `<span class="error">
-        GMID ${gmid} NOT ALLOWED FOR ${destination}
-        </span>`;
-      return;
-    }
   }
 
   db.ref("scans").push({
-    gmid,
-    batch,
-    weight,
-    destination,
-    time:Date.now()
-  }).then(ref=>{
-    lastScanKey=ref.key;
-    playBeep();
+    gmid,batch,weight,dest,time:Date.now()
   });
 
-  document.getElementById("status").innerText=
-    `Loaded ${gmid} | ${batch} | ${weight}`;
+  playBeep();
 }
 
 // BEEP
@@ -374,162 +383,33 @@ function errorBeep(){
   const b=document.getElementById("beepSound");
   b.currentTime=0;
   b.play().catch(()=>{});
-  setTimeout(()=>{
-    b.currentTime=0;
-    b.play().catch(()=>{});
-  },200);
+  setTimeout(()=>b.play().catch(()=>{}),200);
 }
 
-// TOGGLE RULES
+// RULES
 function toggleRules(){
   rulesEnabled=!rulesEnabled;
-  document.getElementById("rulesStatus").innerText=
-    rulesEnabled ? "ON" : "OFF";
+  document.getElementById("rulesBtn").innerText=
+    rulesEnabled?"ON":"OFF";
+}
+
+function addRule(){
+  const d=document.getElementById("ruleDestination").value;
+  const g=document.getElementById("ruleGMID").value.trim();
+  if(!d||!g)return;
+  db.ref("rules/"+d+"/"+g).set(true);
 }
 
 // RENDER
 function render(summary){
-  const table=document.getElementById("table");
-  table.innerHTML="";
-
+  const t=document.getElementById("table");
+  t.innerHTML="";
   Object.values(summary).forEach(i=>{
-    const row=table.insertRow();
-    row.insertCell(0).innerText=i.gmid;
-    row.insertCell(1).innerText=i.batch;
-    row.insertCell(2).innerText=i.qty;
-    row.insertCell(3).innerText=i.weight.toFixed(3);
-  });
-}
-
-// UNDO
-function undoLast(){
-  if(!lastScanKey) return;
-  db.ref("scans/"+lastScanKey).remove();
-  lastScanKey=null;
-}
-
-// RESET
-function resetAll(){
-  db.ref("scans").remove();
-}
-
-// EXPORT
-function exportExcel(){
-
-  const trailer=prompt("Trailer Number:");
-  const delivery=prompt("Delivery Number:");
-  const shipment=prompt("Shipment Number:");
-  const seal=prompt("Seal Number:");
-
-  db.ref("scans").once("value").then(snap=>{
-
-    const data=snap.val() || {};
-    const summary={};
-
-    Object.values(data).forEach(i=>{
-
-      const key=i.gmid+"|"+i.batch;
-
-      if(!summary[key]){
-        summary[key]={
-          gmid:i.gmid,
-          batch:i.batch,
-          qty:0,
-          weight:0
-        };
-      }
-
-      summary[key].qty++;
-      summary[key].weight+=i.weight;
-    });
-
-    const header=[
-      ["TRAILER",trailer],
-      ["DELIVERY",delivery],
-      ["SHIPMENT",shipment],
-      ["SEAL",seal],
-      [""],
-      ["GMID","Batch","Qty","Weight"]
-    ];
-
-    const rows=Object.values(summary).map(i=>[
-      i.gmid,
-      i.batch,
-      i.qty,
-      i.weight.toFixed(3)
-    ]);
-
-    const ws=XLSX.utils.aoa_to_sheet(header.concat(rows));
-    const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,"Load");
-
-    XLSX.writeFile(wb,`LOAD_${trailer || "EXPORT"}.xlsx`);
-  });
-}
-
-// RULES / DESTINATIONS
-
-function addDestination(){
-  const name=document.getElementById("newDestination").value.trim().toUpperCase();
-  if(!name) return;
-  db.ref("rules/"+name).set(true);
-  document.getElementById("newDestination").value="";
-}
-
-function loadDestinations(){
-  db.ref("rules").on("value",snap=>{
-    const data=snap.val() || {};
-    const selects=[
-      document.getElementById("destinationSelect"),
-      document.getElementById("ruleDestination")
-    ];
-
-    selects.forEach(s=>{
-      s.innerHTML=`<option value="">Select Destination</option>`;
-      Object.keys(data).forEach(d=>{
-        const opt=document.createElement("option");
-        opt.value=d;
-        opt.innerText=d;
-        s.appendChild(opt);
-      });
-    });
-  });
-}
-
-function addRule(){
-  const dest=document.getElementById("ruleDestination").value;
-  const gmid=document.getElementById("ruleGMID").value.trim();
-  if(!dest||!gmid) return;
-
-  db.ref("rules/"+dest+"/"+gmid).set(true);
-  document.getElementById("ruleGMID").value="";
-}
-
-function loadRules(){
-  db.ref("rules").on("value",snap=>{
-    const data=snap.val() || {};
-    const table=document.getElementById("rulesTable");
-    table.innerHTML="";
-
-    Object.keys(data).forEach(dest=>{
-      Object.keys(data[dest]).forEach(gmid=>{
-        if(gmid==="true") return;
-
-        const row=table.insertRow();
-        row.insertCell(0).innerText=dest;
-        row.insertCell(1).innerText=gmid;
-
-        const cell=row.insertCell(2);
-        const btn=document.createElement("button");
-        btn.innerText="X";
-
-        btn.onclick=()=>{
-          db.ref("rules/"+dest+"/"+gmid).remove();
-        };
-
-        cell.appendChild(btn);
-      });
-    });
+    const r=t.insertRow();
+    r.insertCell(0).innerText=i.gmid;
+    r.insertCell(1).innerText=i.batch;
+    r.insertCell(2).innerText=i.qty;
+    r.insertCell(3).innerText=i.weight.toFixed(3);
   });
 }
 
