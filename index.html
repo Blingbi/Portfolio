@@ -79,7 +79,7 @@ button{
   font-weight:bold;
 }
 
-/* TABLE FIX */
+/* TABLE */
 table{
   width:100%;
   border-collapse:collapse;
@@ -101,17 +101,13 @@ th{
 /* HIDE */
 .hidden{display:none;}
 
-/* =========================
-   GUN / MOBILE MODE FIX
-   ========================= */
-
+/* MOBILE MODE */
 #mobilePage{
   padding:0;
 }
 
 .mobileBox{
   height:100vh;
-  width:100%;
   display:flex;
   flex-direction:column;
   justify-content:center;
@@ -226,7 +222,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 </div>
 </div>
 
-<!-- MOBILE / GUN MODE -->
+<!-- MOBILE -->
 <div id="mobilePage" class="hidden">
 
 <div class="mobileBox">
@@ -259,8 +255,8 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
-let buffer="";
-let timer=null;
+let buffer = "";
+let timer = null;
 
 /* NAV */
 function showPage(p){
@@ -270,7 +266,9 @@ function showPage(p){
   document.getElementById("mobilePage").classList.add("hidden");
 
   if(p==="scanner") document.getElementById("scannerPage").classList.remove("hidden");
+
   if(p==="rules") document.getElementById("rulesPage").classList.remove("hidden");
+
   if(p==="mobile"){
     document.getElementById("mobilePage").classList.remove("hidden");
 
@@ -285,7 +283,6 @@ auth.onAuthStateChanged(user=>{
   if(user) start();
 });
 
-/* INIT */
 function start(){
 
   loadRules();
@@ -299,6 +296,20 @@ function start(){
     timer=setTimeout(()=>{
       if(buffer.length>10) scan(buffer);
       input.value="";
+      buffer="";
+    },100);
+  });
+
+  /* 🔥 FIX: MOBILE SCAN NOW WORKS */
+  const mobileInput=document.getElementById("mobileScan");
+
+  mobileInput.addEventListener("input",()=>{
+    buffer=mobileInput.value;
+    clearTimeout(timer);
+
+    timer=setTimeout(()=>{
+      if(buffer.length>10) scan(buffer);
+      mobileInput.value="";
       buffer="";
     },100);
   });
