@@ -154,8 +154,9 @@ th{
 
 <div class="card">
 
+<!-- Destination OPTIONAL -->
 <select id="destinationSelect">
-  <option value="">Select Destination</option>
+  <option value="">No Destination (optional)</option>
   <option value="CENTRAL">Central</option>
   <option value="CDW">CDW</option>
   <option value="INTERPLANT">Interplant</option>
@@ -177,6 +178,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 <tr>
 <th>GMID</th>
 <th>Batch</th>
+<th>Destination</th>
 <th>Qty</th>
 <th>Weight</th>
 </tr>
@@ -255,8 +257,8 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
-let buffer = "";
-let timer = null;
+let buffer="";
+let timer=null;
 
 /* NAV */
 function showPage(p){
@@ -283,6 +285,7 @@ auth.onAuthStateChanged(user=>{
   if(user) start();
 });
 
+/* INIT */
 function start(){
 
   loadRules();
@@ -300,7 +303,6 @@ function start(){
     },100);
   });
 
-  /* 🔥 FIX: MOBILE SCAN NOW WORKS */
   const mobileInput=document.getElementById("mobileScan");
 
   mobileInput.addEventListener("input",()=>{
@@ -331,7 +333,7 @@ function start(){
       const k=i.gmid+"|"+i.batch;
 
       if(!summary[k]){
-        summary[k]={gmid:i.gmid,batch:i.batch,qty:0,weight:0};
+        summary[k]={gmid:i.gmid,batch:i.batch,dest:i.dest||"UNASSIGNED",qty:0,weight:0};
       }
 
       summary[k].qty++;
@@ -347,7 +349,7 @@ function start(){
   });
 }
 
-/* SCAN */
+/* SCAN (UPDATED: DEST OPTIONAL) */
 function scan(s){
 
   let g="",b="",w=0;
@@ -360,10 +362,13 @@ function scan(s){
 
   if(!g||!b||!w) return;
 
+  const dest=document.getElementById("destinationSelect").value || "UNASSIGNED";
+
   db.ref("scans").push({
     gmid:g,
     batch:b,
     weight:w,
+    dest:dest,
     time:Date.now()
   });
 }
@@ -372,12 +377,15 @@ function scan(s){
 function render(sum){
   const t=document.getElementById("table");
   t.innerHTML="";
+
   Object.values(sum).forEach(i=>{
     const r=t.insertRow();
+
     r.insertCell(0).innerText=i.gmid;
     r.insertCell(1).innerText=i.batch;
-    r.insertCell(2).innerText=i.qty;
-    r.insertCell(3).innerText=i.weight.toFixed(3);
+    r.insertCell(2).innerText=i.dest;
+    r.insertCell(3).innerText=i.qty;
+    r.insertCell(4).innerText=i.weight.toFixed(3);
   });
 }
 
