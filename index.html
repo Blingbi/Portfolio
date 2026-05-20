@@ -6,6 +6,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
@@ -20,24 +21,33 @@ body{
 
 #nav{
   display:flex;
-  gap:10px;
-  padding:10px;
   background:#121a22;
   border-bottom:1px solid #1f2a36;
+  padding:10px;
+  gap:10px;
 }
 
 .navItem{
   padding:8px 12px;
-  background:#1a2430;
-  border-radius:6px;
   cursor:pointer;
+  border-radius:6px;
+  background:#1a2430;
 }
 
 .navItem.active{background:#1f6feb;}
 
-.container{padding:20px}
+.container{
+  padding:20px;
+  max-width:1200px;
+  margin:auto;
+}
 
-.hidden{display:none}
+.card{
+  background:#121a22;
+  padding:15px;
+  border-radius:8px;
+  border:1px solid #1f2a36;
+}
 
 input,select{
   width:100%;
@@ -53,35 +63,68 @@ button{
   padding:10px;
   margin-top:8px;
   background:#1f6feb;
-  color:white;
   border:none;
-  border-radius:6px;
+  color:white;
   cursor:pointer;
+  border-radius:6px;
 }
 
-.status{margin-top:10px;color:#7ee787}
+.status{
+  margin-top:10px;
+  color:#7ee787;
+  font-weight:bold;
+}
 
 table{
   width:100%;
   border-collapse:collapse;
   margin-top:15px;
+  table-layout:fixed;
 }
 
 th,td{
   border:1px solid #223040;
-  padding:8px;
+  padding:10px;
+  word-wrap:break-word;
 }
 
-.big{
-  font-size:60px;
-  font-weight:900;
+th{
+  background:#1a2430;
+  color:#9fd3ff;
+}
+
+.hidden{display:none;}
+
+/* MOBILE */
+#mobilePage{
+  padding:0;
+}
+
+.mobileBox{
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
   text-align:center;
+  padding:20px;
 }
 
-/* hidden scanner input */
-#gunScan, #mobileGun{
+.bigLabel{
+  font-size:26px;
+  opacity:0.8;
+  margin-top:20px;
+}
+
+.bigNumber{
+  font-size:120px;
+  font-weight:900;
+  margin:10px 0;
+}
+
+#mobileScan{
   position:absolute;
-  left:-9999px;
+  top:-1000px;
 }
 
 </style>
@@ -91,33 +134,45 @@ th,td{
 
 <!-- NAV -->
 <div id="nav">
-  <div class="navItem" onclick="show('scanner')">Scanner</div>
-  <div class="navItem" onclick="show('rules')">Rules</div>
-  <div class="navItem" onclick="show('mobile')">Mobile</div>
+  <div class="navItem active" onclick="showPage('scanner')">Scanner</div>
+  <div class="navItem" onclick="showPage('rules')">Rules</div>
+  <div class="navItem" onclick="showPage('mobile')">Mobile</div>
 </div>
 
 <div class="container">
 
 <!-- SCANNER -->
-<div id="scanner">
+<div id="scannerPage">
 
-<select id="dest">
-  <option value="">Optional Destination</option>
-  <option>Central</option>
-  <option>CDW</option>
-  <option>Interplant</option>
-  <option>Kville</option>
+<div class="card">
+
+<select id="destinationSelect">
+  <option value="">No Destination (optional)</option>
+  <option value="CENTRAL">Central</option>
+  <option value="CDW">CDW</option>
+  <option value="INTERPLANT">Interplant</option>
+  <option value="KVILLE">Kville</option>
 </select>
 
-<input id="gunScan" autocomplete="off">
+<input id="scanInput" placeholder="Scan Data Matrix">
 
-<div class="big" id="total">0</div>
-<div class="status">TOTAL SCANNED</div>
+<!-- RULE TOGGLE MOVED HERE -->
+<button onclick="toggleRules()" id="rulesToggleBtn">Rules: ON</button>
 
-<div class="status">TOTAL WEIGHT: <span id="weight">0</span></div>
+<div class="status">
+Rules Status: <span id="rulesStatus">ENABLED</span>
+</div>
 
 <button onclick="exportExcel()">Export Excel</button>
-<button onclick="resetAll()">Reset</button>
+<button onclick="resetAll()">Reset All</button>
+
+<div class="status">
+Total Scanned: <span id="totalCount">0</span>
+</div>
+
+<div class="status">
+Total Weight: <span id="totalWeight">0.000</span>
+</div>
 
 <table>
 <thead>
@@ -132,18 +187,26 @@ th,td{
 <tbody id="table"></tbody>
 </table>
 
+<div id="status" class="status"></div>
+
+</div>
 </div>
 
-<!-- RULES -->
-<div id="rules" class="hidden">
+<!-- RULES PAGE -->
+<div id="rulesPage" class="hidden">
+
+<div class="card">
 
 <h3>Rules</h3>
 
-<select id="ruleDest">
-  <option>Central</option>
-  <option>CDW</option>
-  <option>Interplant</option>
-  <option>Kville</option>
+<input id="ruleSearch" placeholder="Search GMID or Destination..." oninput="renderRules()">
+
+<select id="ruleDestination">
+  <option value="">Select Destination</option>
+  <option value="CENTRAL">Central</option>
+  <option value="CDW">CDW</option>
+  <option value="INTERPLANT">Interplant</option>
+  <option value="KVILLE">Kville</option>
 </select>
 
 <input id="ruleGMID" placeholder="GMID">
@@ -151,18 +214,33 @@ th,td{
 <button onclick="addRule()">Add Rule</button>
 
 <table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>GMID</th>
+<th>Delete</th>
+</tr>
+</thead>
 <tbody id="rulesTable"></tbody>
 </table>
 
 </div>
+</div>
 
 <!-- MOBILE -->
-<div id="mobile" class="hidden">
+<div id="mobilePage" class="hidden">
 
-<input id="mobileGun" autocomplete="off">
+<div class="mobileBox">
 
-<div class="big" id="mTotal">0</div>
-<div class="status">MOBILE TOTAL</div>
+<div class="bigLabel">TOTAL SCANNED</div>
+<div class="bigNumber" id="mTotal">0</div>
+
+<div class="bigLabel">LAST SCAN</div>
+<div class="bigNumber" id="lastScan">None</div>
+
+<input id="mobileScan" autocomplete="off">
+
+</div>
 
 </div>
 
@@ -170,39 +248,113 @@ th,td{
 
 <script>
 
-const db = firebase.initializeApp({
-  databaseURL:"https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com"
-}).database();
+const firebaseConfig = {
+  apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
+  authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
+  databaseURL: "https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com",
+  projectId: "warehouse-scanner-1b6bc"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
+const db = firebase.database();
 
 let buffer="";
 let timer=null;
 
-let lastKey="";
-let lastTime=0;
-
-let rules=[];
+let allRulesCache={};
+let rulesEnabled=true;
 
 /* NAV */
-function show(p){
+function showPage(p){
 
-  document.getElementById("scanner").classList.add("hidden");
-  document.getElementById("rules").classList.add("hidden");
-  document.getElementById("mobile").classList.add("hidden");
+  document.getElementById("scannerPage").classList.add("hidden");
+  document.getElementById("rulesPage").classList.add("hidden");
+  document.getElementById("mobilePage").classList.add("hidden");
 
-  document.getElementById(p).classList.remove("hidden");
+  if(p==="scanner") document.getElementById("scannerPage").classList.remove("hidden");
+  if(p==="rules") document.getElementById("rulesPage").classList.remove("hidden");
 
-  setTimeout(()=>{
-    if(p==="scanner") gunScan.focus();
-    if(p==="mobile") mobileGun.focus();
-  },100);
+  if(p==="mobile"){
+    document.getElementById("mobilePage").classList.remove("hidden");
+  }
+}
+
+/* START */
+auth.onAuthStateChanged(user=>{
+  if(user) start();
+});
+
+function start(){
+
+  loadRules();
+
+  const input=document.getElementById("scanInput");
+
+  input.addEventListener("input",()=>{
+    buffer=input.value;
+    clearTimeout(timer);
+
+    timer=setTimeout(()=>{
+      if(buffer.length>10) scan(buffer);
+      input.value="";
+      buffer="";
+    },100);
+  });
+
+  const mobileInput=document.getElementById("mobileScan");
+
+  mobileInput.addEventListener("input",()=>{
+    buffer=mobileInput.value;
+    clearTimeout(timer);
+
+    timer=setTimeout(()=>{
+      if(buffer.length>10) scan(buffer);
+      mobileInput.value="";
+      buffer="";
+    },100);
+  });
+
+  db.ref("scans").on("value",snap=>{
+
+    const data=snap.val()||{};
+    let total=0;
+    let weight=0;
+    let last="None";
+
+    const summary={};
+
+    Object.values(data).forEach(i=>{
+      total++;
+      weight+=i.weight;
+      last=`${i.gmid} | ${i.batch}`;
+
+      const k=i.gmid+"|"+i.batch;
+
+      if(!summary[k]){
+        summary[k]={gmid:i.gmid,batch:i.batch,dest:i.dest||"UNASSIGNED",qty:0,weight:0};
+      }
+
+      summary[k].qty++;
+      summary[k].weight+=i.weight;
+    });
+
+    document.getElementById("totalCount").innerText=total;
+    document.getElementById("totalWeight").innerText=weight.toFixed(3);
+    document.getElementById("mTotal").innerText=total;
+    document.getElementById("lastScan").innerText=last;
+
+    render(summary);
+  });
 }
 
 /* SCAN */
-function scan(raw){
+function scan(s){
 
   let g="",b="",w=0;
 
-  for(let p of raw.split(";")){
+  for(let p of s.split(";")){
     if(p.startsWith("0100")) g=p.slice(-7);
     if(p.startsWith("10")) b=p.slice(2);
     if(p.startsWith("3103")) w=parseInt(p.slice(4))/1000;
@@ -210,141 +362,148 @@ function scan(raw){
 
   if(!g||!b||!w) return;
 
-  let key=g+"|"+b;
-  let now=Date.now();
-
-  if(key===lastKey && now-lastTime<900) return;
-
-  lastKey=key;
-  lastTime=now;
+  const dest=document.getElementById("destinationSelect").value || "UNASSIGNED";
 
   db.ref("scans").push({
     gmid:g,
     batch:b,
     weight:w,
-    dest:document.getElementById("dest").value||"UNASSIGNED",
-    time:now
+    dest:dest,
+    time:Date.now()
   });
 }
 
-/* INPUTS */
-const gunScan=document.getElementById("gunScan");
-const mobileGun=document.getElementById("mobileGun");
+/* RENDER */
+function render(sum){
 
-gunScan.addEventListener("input",e=>{
-  buffer=e.target.value;
-  clearTimeout(timer);
-  timer=setTimeout(()=>{
-    scan(buffer);
-    e.target.value="";
-  },60);
-});
-
-mobileGun.addEventListener("input",e=>{
-  buffer=e.target.value;
-  clearTimeout(timer);
-  timer=setTimeout(()=>{
-    scan(buffer);
-    e.target.value="";
-  },60);
-});
-
-/* LIVE DATA */
-db.ref("scans").on("value",snap=>{
-
-  let data=snap.val()||{};
-  let total=0;
-  let weight=0;
-  let table={};
-
-  Object.values(data).forEach(i=>{
-
-    total++;
-    weight+=i.weight;
-
-    let k=i.gmid+"|"+i.batch;
-
-    if(!table[k]){
-      table[k]={gmid:i.gmid,batch:i.batch,dest:i.dest,qty:0,weight:0};
-    }
-
-    table[k].qty++;
-    table[k].weight+=i.weight;
-  });
-
-  document.getElementById("total").innerText=total;
-  document.getElementById("mTotal").innerText=total;
-  document.getElementById("weight").innerText=weight.toFixed(3);
-
-  let t=document.getElementById("table");
+  const t=document.getElementById("table");
   t.innerHTML="";
 
-  Object.values(table).forEach(i=>{
-    let r=t.insertRow();
+  Object.values(sum).forEach(i=>{
+    const r=t.insertRow();
+
     r.insertCell(0).innerText=i.gmid;
     r.insertCell(1).innerText=i.batch;
     r.insertCell(2).innerText=i.dest;
     r.insertCell(3).innerText=i.qty;
     r.insertCell(4).innerText=i.weight.toFixed(3);
   });
-});
+}
 
-/* EXPORT */
+/* EXCEL EXPORT */
 function exportExcel(){
 
   db.ref("scans").once("value").then(snap=>{
 
-    let data=snap.val()||{};
-    let out={};
+    const data=snap.val()||{};
+    const summary={};
 
     Object.values(data).forEach(i=>{
 
-      let k=i.gmid+"|"+i.batch+"|"+i.dest;
+      const key=i.gmid+"|"+i.batch+"|"+(i.dest||"UNASSIGNED");
 
-      if(!out[k]){
-        out[k]={GMID:i.gmid,Batch:i.batch,Dest:i.dest,Qty:0,Weight:0};
+      if(!summary[key]){
+        summary[key]={
+          GMID:i.gmid,
+          Batch:i.batch,
+          Destination:i.dest||"UNASSIGNED",
+          Qty:0,
+          Weight:0
+        };
       }
 
-      out[k].Qty++;
-      out[k].Weight+=i.weight;
+      summary[key].Qty++;
+      summary[key].Weight+=i.weight;
     });
 
-    let rows=Object.values(out);
+    const rows=Object.values(summary).map(i=>({
+      GMID:i.GMID,
+      Batch:i.Batch,
+      Destination:i.Destination,
+      Qty:i.Qty,
+      Weight:Number(i.Weight.toFixed(3))
+    }));
 
-    let ws=XLSX.utils.json_to_sheet(rows);
-    let wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.json_to_sheet(rows);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"Warehouse");
 
-    XLSX.utils.book_append_sheet(wb,ws,"Scans");
-
-    XLSX.writeFile(wb,"warehouse.xlsx");
+    XLSX.writeFile(wb,"warehouse_export.xlsx");
   });
 }
 
 /* RESET */
 function resetAll(){
-  if(confirm("Clear all scans?")){
-    db.ref("scans").remove();
-  }
+
+  if(!confirm("Clear ALL scans?")) return;
+
+  db.ref("scans").remove().then(()=>{
+    document.getElementById("status").innerText="All scans cleared";
+  });
 }
 
 /* RULES */
 function addRule(){
-  rules.push({
-    dest:ruleDest.value,
-    gmid:ruleGMID.value
-  });
 
-  renderRules();
+  const d=document.getElementById("ruleDestination").value;
+  const g=document.getElementById("ruleGMID").value.trim();
+
+  if(!d||!g) return;
+
+  db.ref("rules/"+d+"/"+g).set(true);
+}
+
+function loadRules(){
+
+  db.ref("rules").on("value",snap=>{
+    allRulesCache=snap.val()||{};
+    renderRules();
+  });
+}
+
+/* RULE TOGGLE */
+function toggleRules(){
+
+  rulesEnabled=!rulesEnabled;
+
+  const btn=document.getElementById("rulesToggleBtn");
+  const status=document.getElementById("rulesStatus");
+
+  btn.innerText = rulesEnabled ? "Rules: ON" : "Rules: OFF";
+
+  status.innerText = rulesEnabled ? "ENABLED" : "DISABLED";
+  status.style.color = rulesEnabled ? "#7ee787" : "#ff6b6b";
 }
 
 function renderRules(){
-  let t=document.getElementById("rulesTable");
-  t.innerHTML="";
 
-  rules.forEach(r=>{
-    let row=t.insertRow();
-    row.insertCell(0).innerText=r.dest;
-    row.insertCell(1).innerText=r.gmid;
+  const table=document.getElementById("rulesTable");
+  const search=(document.getElementById("ruleSearch").value||"").toLowerCase();
+
+  table.innerHTML="";
+
+  Object.keys(allRulesCache).forEach(dest=>{
+    Object.keys(allRulesCache[dest]).forEach(gmid=>{
+
+      if(!dest.toLowerCase().includes(search) &&
+         !gmid.toLowerCase().includes(search)) return;
+
+      const row=table.insertRow();
+
+      row.insertCell(0).innerText=dest;
+      row.insertCell(1).innerText=gmid;
+
+      const cell=row.insertCell(2);
+
+      const btn=document.createElement("button");
+      btn.innerText="Delete";
+
+      btn.onclick=()=>{
+        db.ref("rules/"+dest+"/"+gmid).remove();
+      };
+
+      cell.appendChild(btn);
+    });
   });
 }
 
