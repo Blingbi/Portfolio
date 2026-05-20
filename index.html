@@ -9,42 +9,77 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 
 <style>
-body { font-family: Arial; padding:20px; background:#f5f5f5; }
+body {
+  font-family: Arial, sans-serif;
+  background: #0b0f14;
+  color: #d7e1ea;
+  padding: 20px;
+}
 
-#app { display:none; }
+#app, #loginBox {
+  background: #121a22;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #1f2a36;
+}
 
 input {
-  width:100%;
-  padding:12px;
-  font-size:18px;
-  margin:5px 0;
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  margin: 6px 0;
+  background: #0f151c;
+  color: #d7e1ea;
+  border: 1px solid #263241;
+  border-radius: 5px;
 }
 
 button {
-  padding:10px;
-  margin-top:10px;
-  cursor:pointer;
+  padding: 10px;
+  margin-top: 10px;
+  cursor: pointer;
+  background: #1f6feb;
+  border: none;
+  color: white;
+  border-radius: 5px;
+}
+
+button:hover {
+  background: #2b7fff;
 }
 
 table {
-  width:100%;
-  background:white;
-  border-collapse:collapse;
-  margin-top:15px;
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  background: #0f151c;
 }
 
-td,th {
-  border:1px solid #ccc;
-  padding:8px;
+td, th {
+  border: 1px solid #223040;
+  padding: 8px;
 }
 
-.status { margin-top:10px; font-weight:bold; }
+th {
+  background: #1a2430;
+  color: #9fd3ff;
+}
+
+.status {
+  margin-top: 10px;
+  font-weight: bold;
+  color: #7ee787;
+}
+
+.error {
+  color: #ff5c5c;
+}
 </style>
 </head>
 
 <body>
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div id="loginBox">
   <h2>Warehouse Login</h2>
   <input id="email" placeholder="Email">
@@ -56,13 +91,17 @@ td,th {
 <!-- APP -->
 <div id="app">
 
-<h2>Live Scan System</h2>
+<h2>Live Scan Terminal</h2>
 
 <input id="scanInput" placeholder="Scan Data Matrix">
 
 <button onclick="logout()">Logout</button>
 <button onclick="exportCSV()">Export CSV</button>
 <button onclick="resetAll()">Reset</button>
+
+<div class="status">
+  Total Scanned: <span id="totalCount">0</span>
+</div>
 
 <div class="status" id="status"></div>
 
@@ -78,14 +117,13 @@ td,th {
 <tbody id="table"></tbody>
 </table>
 
-<!-- 🔊 BEEP SOUND -->
 <audio id="beepSound" src="beep.mp3" preload="auto"></audio>
 
 </div>
 
 <script>
 
-// Firebase config (yours)
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -103,14 +141,32 @@ const db = firebase.database();
 
 let buffer = "";
 let timer = null;
+let totalCount = 0;
 
-// 🔊 BEEP FUNCTION
+// 🔊 SUCCESS BEEP
 function playBeep() {
   const beep = document.getElementById("beepSound");
   if (!beep) return;
 
+  beep.volume = 1.0;
   beep.currentTime = 0;
   beep.play().catch(() => {});
+}
+
+// 🔊 ERROR = DOUBLE BEEP (same file)
+function playErrorBeep() {
+  const beep = document.getElementById("beepSound");
+  if (!beep) return;
+
+  beep.volume = 1.0;
+
+  beep.currentTime = 0;
+  beep.play().catch(() => {});
+
+  setTimeout(() => {
+    beep.currentTime = 0;
+    beep.play().catch(() => {});
+  }, 180);
 }
 
 // LOGIN
@@ -129,7 +185,7 @@ function logout() {
   auth.signOut();
 }
 
-// AUTH STATE
+// AUTH
 auth.onAuthStateChanged(user => {
 
   if (user) {
@@ -142,7 +198,7 @@ auth.onAuthStateChanged(user => {
   }
 });
 
-// APP START
+// START APP
 function startApp() {
 
   const input = document.getElementById("scanInput");
@@ -181,7 +237,7 @@ function startApp() {
   });
 }
 
-// SCAN PROCESS (UPDATED WITH BEEP)
+// SCAN
 function processScan(scan) {
 
   let gmid = "";
@@ -197,7 +253,13 @@ function processScan(scan) {
     else if (p.startsWith("3103")) weight = parseInt(p.substring(4)) / 1000;
   }
 
-  if (!gmid || !batch || !weight) return;
+  // ❌ INVALID SCAN
+  if (!gmid || !batch || !weight) {
+    playErrorBeep();
+    document.getElementById("status").innerText =
+      "INVALID SCAN";
+    return;
+  }
 
   db.ref("scans").push({
     gmid,
@@ -206,69 +268,9 @@ function processScan(scan) {
     time: Date.now()
   })
   .then(() => {
-    playBeep(); // 🔊 SUCCESS BEEP
+    playBeep();
+    totalCount++;
+    document.getElementById("totalCount").innerText = totalCount;
   });
 
-  document.getElementById("status").innerText =
-    `Sent ${gmid} | ${batch} | ${weight}`;
-}
-
-// RENDER TABLE
-function render(summary) {
-
-  const table = document.getElementById("table");
-  table.innerHTML = "";
-
-  Object.values(summary).forEach(i => {
-
-    const row = table.insertRow();
-
-    row.insertCell(0).innerText = i.gmid;
-    row.insertCell(1).innerText = i.batch;
-    row.insertCell(2).innerText = i.qty;
-    row.insertCell(3).innerText = i.weight.toFixed(3);
-  });
-}
-
-function resetAll() {
-  db.ref("scans").remove();
-}
-
-function exportCSV() {
-  db.ref("scans").once("value").then(snap => {
-
-    const data = snap.val() || {};
-    const summary = {};
-
-    Object.values(data).forEach(i => {
-
-      const key = i.gmid + "|" + i.batch;
-
-      if (!summary[key]) {
-        summary[key] = { gmid:i.gmid, batch:i.batch, qty:0, weight:0 };
-      }
-
-      summary[key].qty++;
-      summary[key].weight += i.weight;
-    });
-
-    let csv = "GMID,Batch,Qty,Weight\n";
-
-    Object.values(summary).forEach(i => {
-      csv += `${i.gmid},${i.batch},${i.qty},${i.weight.toFixed(3)}\n`;
-    });
-
-    const blob = new Blob([csv], {type:"text/csv"});
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "warehouse.csv";
-    a.click();
-  });
-}
-
-</script>
-
-</body>
-</html>
+  document
