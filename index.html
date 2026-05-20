@@ -20,9 +20,9 @@ body{
 
 #nav{
   display:flex;
-  background:#121a22;
-  padding:10px;
   gap:10px;
+  padding:10px;
+  background:#121a22;
   border-bottom:1px solid #1f2a36;
 }
 
@@ -53,12 +53,19 @@ button{
   padding:10px;
   margin-top:8px;
   background:#1f6feb;
-  border:none;
   color:white;
+  border:none;
   border-radius:6px;
+  cursor:pointer;
 }
 
-.status{color:#7ee787;margin-top:10px}
+.status{margin-top:10px;color:#7ee787}
+
+/* hidden scanner inputs */
+#gunScan, #mobileGun{
+  position:absolute;
+  left:-9999px;
+}
 
 table{
   width:100%;
@@ -71,24 +78,10 @@ th,td{
   padding:8px;
 }
 
-/* IMPORTANT: prevents keyboard focus behavior */
-input[readonly]{
-  caret-color: transparent;
-}
-
-#gunScan, #mobileGun{
-  position:absolute;
-  left:-9999px;
-}
-
-.mobileBox{
-  text-align:center;
-  padding:20px;
-}
-
 .big{
-  font-size:80px;
+  font-size:70px;
   font-weight:900;
+  text-align:center;
 }
 
 </style>
@@ -99,6 +92,7 @@ input[readonly]{
 <!-- NAV -->
 <div id="nav">
   <div class="navItem" onclick="show('scanner')">Scanner</div>
+  <div class="navItem" onclick="show('rules')">Rules</div>
   <div class="navItem" onclick="show('mobile')">Mobile</div>
 </div>
 
@@ -115,22 +109,60 @@ input[readonly]{
   <option>Kville</option>
 </select>
 
-<!-- READONLY = NO KEYBOARD -->
-<input id="gunScan" readonly>
+<input id="gunScan" autocomplete="off">
 
 <div class="big" id="total">0</div>
 <div class="status">TOTAL SCANNED</div>
+<div class="status">TOTAL WEIGHT: <span id="weight">0</span></div>
+
+<button onclick="exportExcel()">Export Excel</button>
+<button onclick="resetAll()">Reset</button>
+
+<table>
+<thead>
+<tr>
+<th>GMID</th>
+<th>Batch</th>
+<th>Dest</th>
+<th>Qty</th>
+<th>Weight</th>
+</tr>
+</thead>
+<tbody id="table"></tbody>
+</table>
+
+</div>
+
+<!-- RULES -->
+<div id="rules" class="hidden">
+
+<input id="ruleSearch" placeholder="Search rules" oninput="renderRules()">
+
+<select id="ruleDest">
+  <option>Central</option>
+  <option>CDW</option>
+  <option>Interplant</option>
+  <option>Kville</option>
+</select>
+
+<input id="ruleGMID" placeholder="GMID">
+
+<button onclick="addRule()">Add Rule</button>
+<button onclick="toggleRules()">Toggle Rules</button>
+
+<table>
+<tbody id="rulesTable"></tbody>
+</table>
 
 </div>
 
 <!-- MOBILE -->
 <div id="mobile" class="hidden">
 
+<input id="mobileGun" autocomplete="off">
+
 <div class="big" id="mTotal">0</div>
 <div class="status">MOBILE TOTAL</div>
-
-<!-- READONLY = NO KEYBOARD -->
-<input id="mobileGun" readonly>
 
 </div>
 
@@ -142,23 +174,32 @@ const db = firebase.initializeApp({
   databaseURL:"https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com"
 }).database();
 
-let buffer1="", buffer2="";
-let timer1, timer2;
-
+/* STATE */
+let buffer="";
+let timer=null;
 let lastKey="";
 let lastTime=0;
 
+let rulesEnabled=true;
+let rules=[];
+
 /* NAV */
-function show(page){
+function show(p){
 
   document.getElementById("scanner").classList.add("hidden");
+  document.getElementById("rules").classList.add("hidden");
   document.getElementById("mobile").classList.add("hidden");
 
-  document.getElementById(page).classList.remove("hidden");
+  document.getElementById(p).classList.remove("hidden");
+
+  setTimeout(()=>{
+    if(p==="scanner") gunScan.focus();
+    if(p==="mobile") mobileGun.focus();
+  },100);
 }
 
 /* CORE SCAN */
-function processScan(raw){
+function scan(raw){
 
   let g="",b="",w=0;
 
@@ -178,53 +219,149 @@ function processScan(raw){
   lastKey=key;
   lastTime=now;
 
+  let dest=document.getElementById("dest").value||"UNASSIGNED";
+
   db.ref("scans").push({
     gmid:g,
     batch:b,
     weight:w,
-    dest:document.getElementById("dest").value||"UNASSIGNED",
+    dest:dest,
     time:now
   });
 }
 
 /* SCANNER INPUT */
-document.getElementById("gunScan").addEventListener("input",e=>{
-  buffer1=e.target.value;
-  clearTimeout(timer1);
+const gunScan=document.getElementById("gunScan");
 
-  timer1=setTimeout(()=>{
-    processScan(buffer1);
+gunScan.addEventListener("input",e=>{
+  buffer=e.target.value;
+  clearTimeout(timer);
+
+  timer=setTimeout(()=>{
+    scan(buffer);
     e.target.value="";
-
-    // IMPORTANT: prevents keyboard popup loop
-    e.target.blur();
-  },50);
+    gunScan.focus();
+  },60);
 });
 
 /* MOBILE INPUT */
-document.getElementById("mobileGun").addEventListener("input",e=>{
-  buffer2=e.target.value;
-  clearTimeout(timer2);
+const mobileGun=document.getElementById("mobileGun");
 
-  timer2=setTimeout(()=>{
-    processScan(buffer2);
+mobileGun.addEventListener("input",e=>{
+  buffer=e.target.value;
+  clearTimeout(timer);
+
+  timer=setTimeout(()=>{
+    scan(buffer);
     e.target.value="";
-
-    // IMPORTANT: prevents keyboard popup loop
-    e.target.blur();
-  },50);
+    mobileGun.focus();
+  },60);
 });
 
-/* LIVE TOTALS */
+/* LIVE DATA */
 db.ref("scans").on("value",snap=>{
+
   let data=snap.val()||{};
-  let c=0;
+  let total=0;
+  let weight=0;
+  let table={};
 
-  Object.values(data).forEach(()=>c++);
+  Object.values(data).forEach(i=>{
 
-  document.getElementById("total").innerText=c;
-  document.getElementById("mTotal").innerText=c;
+    total++;
+    weight+=i.weight;
+
+    let k=i.gmid+"|"+i.batch;
+
+    if(!table[k]){
+      table[k]={gmid:i.gmid,batch:i.batch,dest:i.dest,qty:0,weight:0};
+    }
+
+    table[k].qty++;
+    table[k].weight+=i.weight;
+  });
+
+  document.getElementById("total").innerText=total;
+  document.getElementById("mTotal").innerText=total;
+  document.getElementById("weight").innerText=weight.toFixed(3);
+
+  let t=document.getElementById("table");
+  t.innerHTML="";
+
+  Object.values(table).forEach(i=>{
+    let r=t.insertRow();
+    r.insertCell(0).innerText=i.gmid;
+    r.insertCell(1).innerText=i.batch;
+    r.insertCell(2).innerText=i.dest;
+    r.insertCell(3).innerText=i.qty;
+    r.insertCell(4).innerText=i.weight.toFixed(3);
+  });
 });
+
+/* EXPORT EXCEL */
+function exportExcel(){
+
+  db.ref("scans").once("value").then(snap=>{
+
+    let data=snap.val()||{};
+    let out={};
+
+    Object.values(data).forEach(i=>{
+
+      let k=i.gmid+"|"+i.batch+"|"+i.dest;
+
+      if(!out[k]){
+        out[k]={GMID:i.gmid,Batch:i.batch,Dest:i.dest,Qty:0,Weight:0};
+      }
+
+      out[k].Qty++;
+      out[k].Weight+=i.weight;
+    });
+
+    let rows=Object.values(out).map(i=>({
+      GMID:i.GMID,
+      Batch:i.Batch,
+      Destination:i.Dest,
+      Qty:i.Qty,
+      Weight:i.Weight.toFixed(3)
+    }));
+
+    let ws=XLSX.utils.json_to_sheet(rows);
+    let wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"Scans");
+
+    XLSX.writeFile(wb,"warehouse.xlsx");
+  });
+}
+
+/* RESET */
+function resetAll(){
+  if(confirm("Clear all scans?")){
+    db.ref("scans").remove();
+  }
+}
+
+/* RULES */
+function addRule(){
+  rules.push({
+    dest:ruleDest.value,
+    gmid:ruleGMID.value
+  });
+}
+
+function toggleRules(){
+  rulesEnabled=!rulesEnabled;
+}
+
+function renderRules(){
+  let t=document.getElementById("rulesTable");
+  t.innerHTML="";
+  rules.forEach(r=>{
+    let row=t.insertRow();
+    row.insertCell(0).innerText=r.dest;
+    row.insertCell(1).innerText=r.gmid;
+  });
+}
 
 </script>
 
