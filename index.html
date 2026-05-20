@@ -61,12 +61,6 @@ button{
 
 .status{margin-top:10px;color:#7ee787}
 
-/* hidden scanner inputs */
-#gunScan, #mobileGun{
-  position:absolute;
-  left:-9999px;
-}
-
 table{
   width:100%;
   border-collapse:collapse;
@@ -79,9 +73,15 @@ th,td{
 }
 
 .big{
-  font-size:70px;
+  font-size:60px;
   font-weight:900;
   text-align:center;
+}
+
+/* hidden scanner input */
+#gunScan, #mobileGun{
+  position:absolute;
+  left:-9999px;
 }
 
 </style>
@@ -113,6 +113,7 @@ th,td{
 
 <div class="big" id="total">0</div>
 <div class="status">TOTAL SCANNED</div>
+
 <div class="status">TOTAL WEIGHT: <span id="weight">0</span></div>
 
 <button onclick="exportExcel()">Export Excel</button>
@@ -123,7 +124,7 @@ th,td{
 <tr>
 <th>GMID</th>
 <th>Batch</th>
-<th>Dest</th>
+<th>Destination</th>
 <th>Qty</th>
 <th>Weight</th>
 </tr>
@@ -136,7 +137,7 @@ th,td{
 <!-- RULES -->
 <div id="rules" class="hidden">
 
-<input id="ruleSearch" placeholder="Search rules" oninput="renderRules()">
+<h3>Rules</h3>
 
 <select id="ruleDest">
   <option>Central</option>
@@ -148,7 +149,6 @@ th,td{
 <input id="ruleGMID" placeholder="GMID">
 
 <button onclick="addRule()">Add Rule</button>
-<button onclick="toggleRules()">Toggle Rules</button>
 
 <table>
 <tbody id="rulesTable"></tbody>
@@ -174,13 +174,12 @@ const db = firebase.initializeApp({
   databaseURL:"https://warehouse-scanner-1b6bc-default-rtdb.firebaseio.com"
 }).database();
 
-/* STATE */
 let buffer="";
 let timer=null;
+
 let lastKey="";
 let lastTime=0;
 
-let rulesEnabled=true;
 let rules=[];
 
 /* NAV */
@@ -198,7 +197,7 @@ function show(p){
   },100);
 }
 
-/* CORE SCAN */
+/* SCAN */
 function scan(raw){
 
   let g="",b="",w=0;
@@ -219,42 +218,34 @@ function scan(raw){
   lastKey=key;
   lastTime=now;
 
-  let dest=document.getElementById("dest").value||"UNASSIGNED";
-
   db.ref("scans").push({
     gmid:g,
     batch:b,
     weight:w,
-    dest:dest,
+    dest:document.getElementById("dest").value||"UNASSIGNED",
     time:now
   });
 }
 
-/* SCANNER INPUT */
+/* INPUTS */
 const gunScan=document.getElementById("gunScan");
+const mobileGun=document.getElementById("mobileGun");
 
 gunScan.addEventListener("input",e=>{
   buffer=e.target.value;
   clearTimeout(timer);
-
   timer=setTimeout(()=>{
     scan(buffer);
     e.target.value="";
-    gunScan.focus();
   },60);
 });
-
-/* MOBILE INPUT */
-const mobileGun=document.getElementById("mobileGun");
 
 mobileGun.addEventListener("input",e=>{
   buffer=e.target.value;
   clearTimeout(timer);
-
   timer=setTimeout(()=>{
     scan(buffer);
     e.target.value="";
-    mobileGun.focus();
   },60);
 });
 
@@ -298,7 +289,7 @@ db.ref("scans").on("value",snap=>{
   });
 });
 
-/* EXPORT EXCEL */
+/* EXPORT */
 function exportExcel(){
 
   db.ref("scans").once("value").then(snap=>{
@@ -318,16 +309,11 @@ function exportExcel(){
       out[k].Weight+=i.weight;
     });
 
-    let rows=Object.values(out).map(i=>({
-      GMID:i.GMID,
-      Batch:i.Batch,
-      Destination:i.Dest,
-      Qty:i.Qty,
-      Weight:i.Weight.toFixed(3)
-    }));
+    let rows=Object.values(out);
 
     let ws=XLSX.utils.json_to_sheet(rows);
     let wb=XLSX.utils.book_new();
+
     XLSX.utils.book_append_sheet(wb,ws,"Scans");
 
     XLSX.writeFile(wb,"warehouse.xlsx");
@@ -347,15 +333,14 @@ function addRule(){
     dest:ruleDest.value,
     gmid:ruleGMID.value
   });
-}
 
-function toggleRules(){
-  rulesEnabled=!rulesEnabled;
+  renderRules();
 }
 
 function renderRules(){
   let t=document.getElementById("rulesTable");
   t.innerHTML="";
+
   rules.forEach(r=>{
     let row=t.insertRow();
     row.insertCell(0).innerText=r.dest;
