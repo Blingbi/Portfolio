@@ -289,11 +289,7 @@ function showPage(p){
   if(p==="mobile") document.getElementById("mobilePage").classList.remove("hidden");
 }
 
-/* START */
-auth.onAuthStateChanged(user=>{
-  if(user) start();
-});
-
+/* START (FIXED - NO AUTH BLOCK) */
 function start(){
 
   loadRules();
@@ -303,7 +299,7 @@ function start(){
     clearTimeout(timer);
 
     timer=setTimeout(()=>{
-      if(buffer.length>10) scan(buffer);
+      if(buffer.length > 0) scan(buffer);
       e.target.value="";
       buffer="";
     },100);
@@ -314,7 +310,7 @@ function start(){
     clearTimeout(timer);
 
     timer=setTimeout(()=>{
-      if(buffer.length>10) scan(buffer);
+      if(buffer.length > 0) scan(buffer);
       e.target.value="";
       buffer="";
     },100);
@@ -353,6 +349,9 @@ function start(){
   });
 }
 
+/* FORCE START IMMEDIATELY */
+start();
+
 /* SCAN */
 function scan(s){
 
@@ -371,14 +370,12 @@ function scan(s){
 
   const dest=document.getElementById("destinationSelect").value || "UNASSIGNED";
 
-  /* RULE CHECK */
   if(rulesEnabled && allRulesCache){
 
     for(let d in allRulesCache){
       if(allRulesCache[d] && allRulesCache[d][g]){
 
         if(d !== dest){
-
           playError("RULE VIOLATION: " + g + " must go to " + d);
           return;
         }
