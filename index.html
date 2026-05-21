@@ -288,7 +288,51 @@ function showPage(p){
   if(p==="rules") document.getElementById("rulesPage").classList.remove("hidden");
   if(p==="mobile") document.getElementById("mobilePage").classList.remove("hidden");
 }
+function exportExcel(){
 
+  db.ref("scans").once("value").then(snap=>{
+
+    const data = snap.val() || {};
+    const summary = {};
+
+    Object.values(data).forEach(i=>{
+
+      const key = i.gmid + "|" + i.batch + "|" + (i.dest || "UNASSIGNED");
+
+      if(!summary[key]){
+        summary[key] = {
+          GMID: i.gmid,
+          Batch: i.batch,
+          Destination: i.dest || "UNASSIGNED",
+          Qty: 0,
+          Weight: 0
+        };
+      }
+
+      summary[key].Qty += 1;
+      summary[key].Weight += (i.weight || 0);
+    });
+
+    const rows = Object.values(summary).map(i=>({
+      GMID: i.GMID,
+      Batch: i.Batch,
+      Destination: i.Destination,
+      Qty: i.Qty,
+      Weight: Number(i.Weight.toFixed(3))
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Warehouse");
+
+    XLSX.writeFile(wb, "warehouse_export.xlsx");
+
+  }).catch(err=>{
+    playError("EXPORT FAILED");
+    console.log(err);
+  });
+}
 /* START (FIXED - NO AUTH BLOCK) */
 function start(){
 
