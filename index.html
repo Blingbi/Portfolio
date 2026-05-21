@@ -481,7 +481,20 @@ function loadRules(){
     renderRules();
   });
 }
+function resetAll(){
 
+  if(!confirm("Clear ALL scans?")) return;
+
+  db.ref("scans").remove().then(()=>{
+
+    document.getElementById("status").innerText = "All scans cleared";
+    document.getElementById("status").style.color = "#7ee787";
+
+  }).catch(err=>{
+    playError("RESET FAILED");
+    console.log(err);
+  });
+}
 function renderRules(){
 
   const table=document.getElementById("rulesTable");
