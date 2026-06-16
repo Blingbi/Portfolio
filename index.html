@@ -457,6 +457,7 @@ Total Weight: <span id="totalWeight">0.000</span>
 <h3>MB52 Validation Scanner</h3>
 <textarea id="mb52Input" style="width:100%;height:250px;background:#0f151c;color:white;border:1px solid #263241;padding:10px;" placeholder="Paste MB52 report here"></textarea>
 <button onclick="loadMB52()">Load MB52</button>
+ <button onclick="clearMB52()">Clear MB52 List</button>
 <select id="mb52Mode">
 <option value="UNRESTRICTED">Unrestricted Only</option>
 <option value="UNRESTRICTED_QUALITY">Unrestricted + Quality</option>
@@ -563,6 +564,22 @@ function exportExcel(){
     playError("EXPORT FAILED");
     console.log(err);
   });
+}
+ function clearMB52(){
+
+  if(!confirm("Clear MB52 list for ALL scanners?")) return;
+
+  db.ref("mb52").remove().then(()=>{
+
+    allowedBatches = {};
+    document.getElementById("mb52Count").innerText = "0";
+    document.getElementById("mb52Status").innerText = "MB52 List Cleared";
+
+  }).catch(err=>{
+    playError("MB52 CLEAR FAILED");
+    console.log(err);
+  });
+
 }
 /* START (FIXED - NO AUTH BLOCK) */
 function start(){
