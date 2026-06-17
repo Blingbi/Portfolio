@@ -458,6 +458,9 @@ Total Weight: <span id="totalWeight">0.000</span>
 <textarea id="mb52Input" style="width:100%;height:250px;background:#0f151c;color:white;border:1px solid #263241;padding:10px;" placeholder="Paste MB52 report here"></textarea>
 <button onclick="loadMB52()">Load MB52</button>
  <button onclick="clearMB52()">Clear MB52 List</button>
+<button onclick="exportMB52()">Export MB52 Excel</button>
+
+<button onclick="resetMB52()">Reset MB52 Scans</button>
 <select id="mb52Mode">
 <option value="UNRESTRICTED">Unrestricted Only</option>
 <option value="UNRESTRICTED_QUALITY">Unrestricted + Quality</option>
@@ -726,7 +729,53 @@ function toggleRules(){
   status.innerText = rulesEnabled ? "ENABLED" : "DISABLED";
   status.style.color = rulesEnabled ? "#7ee787" : "#ff6b6b";
 }
+function exportMB52(){
 
+  const rows = mb52Scans.map(i=>({
+    GMID: i.gmid,
+    Batch: i.batch,
+    Status: i.status,
+    Weight: Number(i.weight.toFixed(3))
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "MB52 Scans");
+
+  XLSX.writeFile(wb, "mb52_scans.xlsx");
+}
+function resetMB52(){
+
+  if(!confirm("Clear MB52 scanned records?")) return;
+
+  mb52Scans = [];
+
+  renderMB52();
+
+  document.getElementById("mb52Status").innerText =
+    "MB52 scans cleared";
+}
+function clearMB52(){
+
+  if(!confirm("Clear MB52 list for ALL scanners?")) return;
+
+  db.ref("mb52").remove().then(()=>{
+
+    allowedBatches = {};
+
+    document.getElementById("mb52Count").innerText = "0";
+
+    document.getElementById("mb52Status").innerText =
+      "MB52 list cleared";
+
+  }).catch(err=>{
+
+    playError("MB52 CLEAR FAILED");
+    console.log(err);
+
+  });
+}
 function addRule(){
   const d=document.getElementById("ruleDestination").value;
   const g=document.getElementById("ruleGMID").value.trim();
