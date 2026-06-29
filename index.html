@@ -171,37 +171,38 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 /* SOUND */
-const successBeep = document.createElement("audio");
-successBeep.src = "./Beep.mp3";
-successBeep.preload = "auto";
-successBeep.load();
+/* SOUND */
+const successBeep = new Audio("./Beep.mp3");
+const errorBeep = new Audio("./ErrorBeep.mp3");
 
-const errorBeep = document.createElement("audio");
-errorBeep.src = "./ErrorBeep.mp3";
+successBeep.preload = "auto";
 errorBeep.preload = "auto";
+
+successBeep.load();
 errorBeep.load();
 
-document.body.appendChild(successBeep);
-document.body.appendChild(errorBeep);
+function playSound(audio){
+  audio.pause();
+  audio.currentTime = 0;
+
+  audio.play().catch(err=>{
+    console.log("Sound failed:", err);
+
+    audio.load();
+
+    setTimeout(()=>{
+      audio.currentTime = 0;
+      audio.play().catch(e=>console.log("Retry failed:", e));
+    },50);
+  });
+}
 
 function playSuccess(){
-  try{
-    const sound = successBeep.cloneNode(true);
-    sound.volume = 1;
-    sound.play().catch(err=>console.log("Success beep failed:", err));
-  }catch(err){
-    console.log("Success beep error:", err);
-  }
+  playSound(successBeep);
 }
 
 function playErrorSound(){
-  try{
-    const sound = errorBeep.cloneNode(true);
-    sound.volume = 1;
-    sound.play().catch(err=>console.log("Error beep failed:", err));
-  }catch(err){
-    console.log("Error beep error:", err);
-  }
+  playSound(errorBeep);
 }
 
 /* STATE */
