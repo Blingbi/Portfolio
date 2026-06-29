@@ -6,29 +6,27 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
 body{margin:0;font-family:Arial;background:#0b0f14;color:#d7e1ea;}
-#nav{display:flex;background:#121a22;border-bottom:1px solid #1f2a36;padding:10px;gap:10px;}
+#nav{display:flex;background:#121a22;border-bottom:1px solid #1f2a36;padding:10px;gap:10px;flex-wrap:wrap;}
 .navItem{padding:8px 12px;cursor:pointer;border-radius:6px;background:#1a2430;}
 .navItem.active{background:#1f6feb;}
 .container{padding:20px;max-width:1200px;margin:auto;}
 .card{background:#121a22;padding:15px;border-radius:8px;border:1px solid #1f2a36;}
-input,select{width:100%;padding:10px;margin:5px 0;background:#0f151c;color:white;border:1px solid #263241;box-sizing:border-box;}
-button{padding:10px;margin-top:8px;background:#1f6feb;border:none;color:white;cursor:pointer;border-radius:6px;}
+input,select,textarea{width:100%;padding:10px;margin:5px 0;background:#0f151c;color:white;border:1px solid #263241;box-sizing:border-box;}
+button{padding:10px;margin-top:8px;background:#1f6feb;border:none;color:white;cursor:pointer;border-radius:6px;margin-right:5px;}
 .status{margin-top:10px;color:#7ee787;font-weight:bold;}
+.error{color:#ff6b6b;}
 table{width:100%;border-collapse:collapse;margin-top:15px;table-layout:fixed;}
 th,td{border:1px solid #223040;padding:10px;word-wrap:break-word;}
 th{background:#1a2430;color:#9fd3ff;}
 .hidden{display:none;}
-#mobilePage{padding:0;}
 .mobileBox{height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:20px;}
 .bigLabel{font-size:26px;opacity:0.8;margin-top:20px;}
-.bigNumber{font-size:80px;font-weight:900;margin:10px 0;}
+.bigNumber{font-size:70px;font-weight:900;margin:10px 0;}
 #mobileScan{position:absolute;top:-1000px;}
-textarea{box-sizing:border-box;}
 </style>
 </head>
 
@@ -46,7 +44,7 @@ textarea{box-sizing:border-box;}
 <div id="scannerPage">
 <div class="card">
 <select id="destinationSelect">
-  <option value="">No Destination (optional)</option>
+  <option value="">No Destination / Unassigned</option>
   <option value="CENTRAL">Central</option>
   <option value="CDW">CDW</option>
   <option value="INTERPLANT">Interplant</option>
@@ -54,20 +52,23 @@ textarea{box-sizing:border-box;}
 </select>
 
 <input id="scanInput" placeholder="Scan Data Matrix">
+
 <button onclick="toggleRules()" id="rulesToggleBtn">Rules: ON</button>
-
-<div class="status">Rules Status: <span id="rulesStatus">ENABLED</span></div>
-
 <button onclick="exportExcel()">Export Excel</button>
 <button onclick="resetAll()">Reset All</button>
 
+<div class="status">Rules Status: <span id="rulesStatus">ENABLED</span></div>
 <div class="status">Total Scanned: <span id="totalCount">0</span></div>
 <div class="status">Total Weight: <span id="totalWeight">0.000</span></div>
 
 <table>
 <thead>
 <tr>
-<th>GMID</th><th>Batch</th><th>Destination</th><th>Qty</th><th>Weight</th>
+<th>GMID</th>
+<th>Batch</th>
+<th>Destination</th>
+<th>Qty</th>
+<th>Total Weight</th>
 </tr>
 </thead>
 <tbody id="table"></tbody>
@@ -96,7 +97,11 @@ textarea{box-sizing:border-box;}
 
 <table>
 <thead>
-<tr><th>Destination</th><th>GMID</th><th>Delete</th></tr>
+<tr>
+<th>Destination</th>
+<th>GMID</th>
+<th>Delete</th>
+</tr>
 </thead>
 <tbody id="rulesTable"></tbody>
 </table>
@@ -117,7 +122,7 @@ textarea{box-sizing:border-box;}
 <div class="card">
 <h3>MB52 Validation Scanner</h3>
 
-<textarea id="mb52Input" style="width:100%;height:250px;background:#0f151c;color:white;border:1px solid #263241;padding:10px;" placeholder="Paste MB52 report here"></textarea>
+<textarea id="mb52Input" style="height:250px;" placeholder="Paste MB52 report here"></textarea>
 
 <button onclick="loadMB52()">Load MB52</button>
 <button onclick="clearMB52()">Clear MB52 List</button>
@@ -132,11 +137,17 @@ textarea{box-sizing:border-box;}
 <input id="mb52ScanInput" placeholder="Scan Data Matrix">
 
 <div class="status">Loaded Batches: <span id="mb52Count">0</span></div>
-<div class="status">MB52 Scanned: <span id="mb52ScanCount">0</span></div>
+<div class="status">Total MB52 Scans: <span id="mb52ScanCount">0</span></div>
 
 <table>
 <thead>
-<tr><th>GMID</th><th>Batch</th><th>Status</th><th>Qty</th><th>Total Weight</th></tr>
+<tr>
+<th>GMID</th>
+<th>Batch</th>
+<th>Status</th>
+<th>Qty</th>
+<th>Total Weight</th>
+</tr>
 </thead>
 <tbody id="mb52Table"></tbody>
 </table>
@@ -148,6 +159,7 @@ textarea{box-sizing:border-box;}
 </div>
 
 <script>
+/* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyCJFDM58excT8iD6guuJyQajLxxnFVsHEg",
   authDomain: "warehouse-scanner-1b6bc.firebaseapp.com",
@@ -156,38 +168,112 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-
 const db = firebase.database();
 
-const successBeep = new Audio("Beep.mp3");
-const errorBeep = new Audio("ErrorBeep.mp3");
+/* SOUND */
+const successBeep = document.createElement("audio");
+successBeep.src = "./Beep.mp3";
+successBeep.preload = "auto";
+successBeep.load();
 
-let buffer = "";
-let timer = null;
+const errorBeep = document.createElement("audio");
+errorBeep.src = "./ErrorBeep.mp3";
+errorBeep.preload = "auto";
+errorBeep.load();
+
+document.body.appendChild(successBeep);
+document.body.appendChild(errorBeep);
+
+function playSuccess(){
+  try{
+    const sound = successBeep.cloneNode(true);
+    sound.volume = 1;
+    sound.play().catch(err=>console.log("Success beep failed:", err));
+  }catch(err){
+    console.log("Success beep error:", err);
+  }
+}
+
+function playErrorSound(){
+  try{
+    const sound = errorBeep.cloneNode(true);
+    sound.volume = 1;
+    sound.play().catch(err=>console.log("Error beep failed:", err));
+  }catch(err){
+    console.log("Error beep error:", err);
+  }
+}
+
+/* STATE */
 let allRulesCache = {};
 let rulesEnabled = true;
 let allowedBatches = {};
 let mb52Scans = [];
+let scanTimer = null;
+let mobileTimer = null;
+let mb52Timer = null;
 
-function playError(msg){
-  errorBeep.currentTime = 0;
-  errorBeep.play();
-
-  const mainStatus = document.getElementById("status");
-  const mb52Status = document.getElementById("mb52Status");
-
-  if(mainStatus){
-    mainStatus.innerText = msg;
-    mainStatus.style.color = "#ff6b6b";
-  }
-
-  if(mb52Status){
-    mb52Status.innerText = msg;
-    mb52Status.style.color = "#ff6b6b";
-  }
+/* HELPERS */
+function setStatus(id,msg,isError=false){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.innerText = msg;
+  el.style.color = isError ? "#ff6b6b" : "#7ee787";
 }
 
-function showPage(p){
+function playError(msg){
+  playErrorSound();
+  setStatus("status", msg, true);
+  setStatus("mb52Status", msg, true);
+}
+
+function parseBarcode(raw){
+  let gmid = "";
+  let batch = "";
+  let weight = 0;
+
+  raw.split(";").forEach(part=>{
+    const p = part.trim();
+
+    if(p.startsWith("0100")){
+      gmid = p.slice(-7);
+    }
+
+    if(p.startsWith("10") && !p.startsWith("100")){
+      batch = p.slice(2);
+    }
+
+    if(p.startsWith("3103")){
+      weight = parseInt(p.slice(4),10) / 1000;
+    }
+  });
+
+  return { gmid, batch, weight };
+}
+
+function handleScanInput(inputEl, callback, timerName){
+  const raw = inputEl.value;
+
+  if(timerName === "scan") clearTimeout(scanTimer);
+  if(timerName === "mobile") clearTimeout(mobileTimer);
+  if(timerName === "mb52") clearTimeout(mb52Timer);
+
+  const run = setTimeout(()=>{
+    if(raw.trim().length > 0){
+      callback(raw.trim());
+    }
+
+    inputEl.value = "";
+    inputEl.focus();
+  },100);
+
+  if(timerName === "scan") scanTimer = run;
+  if(timerName === "mobile") mobileTimer = run;
+  if(timerName === "mb52") mb52Timer = run;
+}
+
+/* NAV */
+function showPage(page){
   document.getElementById("scannerPage").classList.add("hidden");
   document.getElementById("rulesPage").classList.add("hidden");
   document.getElementById("mobilePage").classList.add("hidden");
@@ -195,137 +281,57 @@ function showPage(p){
 
   document.querySelectorAll(".navItem").forEach(i=>i.classList.remove("active"));
 
-  if(p==="scanner"){
+  if(page === "scanner"){
     document.getElementById("scannerPage").classList.remove("hidden");
     document.querySelectorAll(".navItem")[0].classList.add("active");
     setTimeout(()=>document.getElementById("scanInput").focus(),100);
   }
 
-  if(p==="rules"){
+  if(page === "rules"){
     document.getElementById("rulesPage").classList.remove("hidden");
     document.querySelectorAll(".navItem")[1].classList.add("active");
   }
 
-  if(p==="mobile"){
+  if(page === "mobile"){
     document.getElementById("mobilePage").classList.remove("hidden");
     document.querySelectorAll(".navItem")[2].classList.add("active");
     setTimeout(()=>document.getElementById("mobileScan").focus(),100);
   }
 
-  if(p==="mb52"){
+  if(page === "mb52"){
     document.getElementById("mb52Page").classList.remove("hidden");
     document.querySelectorAll(".navItem")[3].classList.add("active");
     setTimeout(()=>document.getElementById("mb52ScanInput").focus(),100);
   }
 }
 
+/* START */
 function start(){
-  loadRules();
-
   document.getElementById("scanInput").addEventListener("input", e=>{
-    buffer = e.target.value;
-    clearTimeout(timer);
-
-    timer = setTimeout(()=>{
-      if(buffer.length > 0) scan(buffer);
-      e.target.value = "";
-      buffer = "";
-    },100);
+    handleScanInput(e.target, scan, "scan");
   });
 
   document.getElementById("mobileScan").addEventListener("input", e=>{
-    buffer = e.target.value;
-    clearTimeout(timer);
-
-    timer = setTimeout(()=>{
-      if(buffer.length > 0) scan(buffer);
-      e.target.value = "";
-      buffer = "";
-    },100);
+    handleScanInput(e.target, scan, "mobile");
   });
 
   document.getElementById("mb52ScanInput").addEventListener("input", e=>{
-    buffer = e.target.value;
-    clearTimeout(timer);
-
-    timer = setTimeout(()=>{
-      if(buffer.length > 0) scanMB52(buffer);
-      e.target.value = "";
-      buffer = "";
-    },100);
+    handleScanInput(e.target, scanMB52, "mb52");
   });
 
-  db.ref("mb52").on("value", snap=>{
-    allowedBatches = snap.val() || {};
-    document.getElementById("mb52Count").innerText = Object.keys(allowedBatches).length;
-  });
+  loadRules();
+  listenScans();
+  listenMB52();
+  listenMB52Scans();
 
-  db.ref("mb52Scans").on("value", snap=>{
-    const data = snap.val() || {};
-    mb52Scans = Object.values(data);
-    renderMB52();
-  });
-
-  db.ref("scans").on("value", snap=>{
-    const data = snap.val() || {};
-    let total = 0;
-    let weight = 0;
-    let last = "None";
-    const summary = {};
-
-    Object.values(data).forEach(i=>{
-      total++;
-      weight += Number(i.weight || 0);
-      last = `${i.gmid} | ${i.batch}`;
-
-      const k = i.gmid + "|" + i.batch + "|" + (i.dest || "UNASSIGNED");
-
-      if(!summary[k]){
-        summary[k] = {
-          gmid: i.gmid,
-          batch: i.batch,
-          dest: i.dest || "UNASSIGNED",
-          qty: 0,
-          weight: 0
-        };
-      }
-
-      summary[k].qty++;
-      summary[k].weight += Number(i.weight || 0);
-    });
-
-    document.getElementById("totalCount").innerText = total;
-    document.getElementById("totalWeight").innerText = weight.toFixed(3);
-    document.getElementById("mTotal").innerText = total;
-    document.getElementById("lastScan").innerText = last;
-
-    render(summary);
-  });
+  setTimeout(()=>document.getElementById("scanInput").focus(),100);
 }
 
-function parseBarcode(s){
-  let g = "";
-  let b = "";
-  let w = 0;
+/* NORMAL SCANNER */
+function scan(raw){
+  const p = parseBarcode(raw);
 
-  s.split(";").forEach(p=>{
-    p = p.trim();
-
-    if(p.startsWith("0100")) g = p.slice(-7);
-    if(p.startsWith("10")) b = p.slice(2);
-    if(p.startsWith("3103")) w = parseInt(p.slice(4),10) / 1000;
-  });
-
-  return { gmid:g, batch:b, weight:w };
-}
-
-function scan(s){
-  const parsed = parseBarcode(s);
-  const g = parsed.gmid;
-  const b = parsed.batch;
-  const w = parsed.weight;
-
-  if(!g || !b || !w){
+  if(!p.gmid || !p.batch || !p.weight){
     playError("INVALID BARCODE");
     return;
   }
@@ -333,10 +339,10 @@ function scan(s){
   const dest = document.getElementById("destinationSelect").value || "UNASSIGNED";
 
   if(rulesEnabled && allRulesCache){
-    for(let d in allRulesCache){
-      if(allRulesCache[d] && allRulesCache[d][g]){
+    for(const d in allRulesCache){
+      if(allRulesCache[d] && allRulesCache[d][p.gmid]){
         if(d !== dest){
-          playError("RULE VIOLATION: " + g + " must go to " + d);
+          playError("RULE VIOLATION: " + p.gmid + " must go to " + d);
           return;
         }
       }
@@ -344,35 +350,63 @@ function scan(s){
   }
 
   db.ref("scans").push({
-    gmid:g,
-    batch:b,
-    weight:w,
+    gmid:p.gmid,
+    batch:p.batch,
+    weight:p.weight,
     dest:dest,
     time:Date.now()
+  }).then(()=>{
+    playSuccess();
+    setStatus("status","Scan added");
+  }).catch(err=>{
+    console.log(err);
+    playError("SCAN FAILED");
   });
-
-  successBeep.currentTime = 0;
-  successBeep.play().catch(()=>{});
-}
-function unlockAudio(){
-  successBeep.play().then(()=>{
-    successBeep.pause();
-    successBeep.currentTime = 0;
-  }).catch(()=>{});
-
-  errorBeep.play().then(()=>{
-    errorBeep.pause();
-    errorBeep.currentTime = 0;
-  }).catch(()=>{});
 }
 
-document.addEventListener("click", unlockAudio, { once:true });
-document.addEventListener("touchstart", unlockAudio, { once:true });
-function render(sum){
+function listenScans(){
+  db.ref("scans").on("value", snap=>{
+    const data = snap.val() || {};
+    const summary = {};
+    let total = 0;
+    let weight = 0;
+    let last = "None";
+
+    Object.values(data).forEach(i=>{
+      total++;
+      weight += Number(i.weight || 0);
+      last = `${i.gmid} | ${i.batch}`;
+
+      const key = `${i.gmid}|${i.batch}|${i.dest || "UNASSIGNED"}`;
+
+      if(!summary[key]){
+        summary[key] = {
+          gmid:i.gmid,
+          batch:i.batch,
+          dest:i.dest || "UNASSIGNED",
+          qty:0,
+          weight:0
+        };
+      }
+
+      summary[key].qty++;
+      summary[key].weight += Number(i.weight || 0);
+    });
+
+    document.getElementById("totalCount").innerText = total;
+    document.getElementById("totalWeight").innerText = weight.toFixed(3);
+    document.getElementById("mTotal").innerText = total;
+    document.getElementById("lastScan").innerText = last;
+
+    renderMainTable(summary);
+  });
+}
+
+function renderMainTable(summary){
   const t = document.getElementById("table");
   t.innerHTML = "";
 
-  Object.values(sum).forEach(i=>{
+  Object.values(summary).forEach(i=>{
     const r = t.insertRow();
     r.insertCell(0).innerText = i.gmid;
     r.insertCell(1).innerText = i.batch;
@@ -382,26 +416,73 @@ function render(sum){
   });
 }
 
+function resetAll(){
+  if(!confirm("Clear ALL normal scans?")) return;
+
+  db.ref("scans").remove().then(()=>{
+    setStatus("status","All scans cleared");
+  }).catch(err=>{
+    console.log(err);
+    playError("RESET FAILED");
+  });
+}
+
+function exportExcel(){
+  db.ref("scans").once("value").then(snap=>{
+    const data = snap.val() || {};
+    const summary = {};
+
+    Object.values(data).forEach(i=>{
+      const key = `${i.gmid}|${i.batch}|${i.dest || "UNASSIGNED"}`;
+
+      if(!summary[key]){
+        summary[key] = {
+          GMID:i.gmid,
+          Batch:i.batch,
+          Destination:i.dest || "UNASSIGNED",
+          Qty:0,
+          Weight:0
+        };
+      }
+
+      summary[key].Qty++;
+      summary[key].Weight += Number(i.weight || 0);
+    });
+
+    const rows = Object.values(summary).map(i=>({
+      GMID:i.GMID,
+      Batch:i.Batch,
+      Destination:i.Destination,
+      Qty:i.Qty,
+      Weight:Number(i.Weight.toFixed(3))
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Warehouse");
+    XLSX.writeFile(wb, "warehouse_export.xlsx");
+  });
+}
+
+/* RULES */
 function toggleRules(){
   rulesEnabled = !rulesEnabled;
 
-  const btn = document.getElementById("rulesToggleBtn");
-  const status = document.getElementById("rulesStatus");
-
-  btn.innerText = rulesEnabled ? "Rules: ON" : "Rules: OFF";
-  status.innerText = rulesEnabled ? "ENABLED" : "DISABLED";
-  status.style.color = rulesEnabled ? "#7ee787" : "#ff6b6b";
+  document.getElementById("rulesToggleBtn").innerText = rulesEnabled ? "Rules: ON" : "Rules: OFF";
+  document.getElementById("rulesStatus").innerText = rulesEnabled ? "ENABLED" : "DISABLED";
+  document.getElementById("rulesStatus").style.color = rulesEnabled ? "#7ee787" : "#ff6b6b";
 }
 
 function addRule(){
-  const d = document.getElementById("ruleDestination").value;
-  const g = document.getElementById("ruleGMID").value.trim();
+  const dest = document.getElementById("ruleDestination").value;
+  const gmid = document.getElementById("ruleGMID").value.trim();
 
-  if(!d || !g) return;
+  if(!dest || !gmid) return;
 
-  db.ref("rules/" + d + "/" + g).set(true);
-
-  document.getElementById("ruleGMID").value = "";
+  db.ref("rules/" + dest + "/" + gmid).set(true).then(()=>{
+    document.getElementById("ruleGMID").value = "";
+  });
 }
 
 function loadRules(){
@@ -412,110 +493,69 @@ function loadRules(){
 }
 
 function renderRules(){
-  const table = document.getElementById("rulesTable");
+  const t = document.getElementById("rulesTable");
   const search = (document.getElementById("ruleSearch").value || "").toLowerCase();
 
-  table.innerHTML = "";
+  t.innerHTML = "";
 
   Object.keys(allRulesCache).forEach(dest=>{
     Object.keys(allRulesCache[dest]).forEach(gmid=>{
-      if(
-        !dest.toLowerCase().includes(search) &&
-        !gmid.toLowerCase().includes(search)
-      ) return;
+      if(!dest.toLowerCase().includes(search) && !gmid.toLowerCase().includes(search)) return;
 
-      const row = table.insertRow();
+      const r = t.insertRow();
+      r.insertCell(0).innerText = dest;
+      r.insertCell(1).innerText = gmid;
 
-      row.insertCell(0).innerText = dest;
-      row.insertCell(1).innerText = gmid;
-
-      const cell = row.insertCell(2);
+      const c = r.insertCell(2);
       const btn = document.createElement("button");
 
       btn.innerText = "Delete";
-      btn.onclick = ()=>{
-        db.ref("rules/" + dest + "/" + gmid).remove();
-      };
+      btn.onclick = ()=>db.ref("rules/" + dest + "/" + gmid).remove();
 
-      cell.appendChild(btn);
+      c.appendChild(btn);
     });
   });
 }
 
-function resetAll(){
-  if(!confirm("Clear ALL scans?")) return;
-
-  db.ref("scans").remove().then(()=>{
-    document.getElementById("status").innerText = "All scans cleared";
-    document.getElementById("status").style.color = "#7ee787";
-  }).catch(err=>{
-    playError("RESET FAILED");
-    console.log(err);
+/* MB52 */
+function listenMB52(){
+  db.ref("mb52").on("value", snap=>{
+    allowedBatches = snap.val() || {};
+    document.getElementById("mb52Count").innerText = Object.keys(allowedBatches).length;
   });
 }
 
-function exportExcel(){
-  db.ref("scans").once("value").then(snap=>{
+function listenMB52Scans(){
+  db.ref("mb52Scans").on("value", snap=>{
     const data = snap.val() || {};
-    const summary = {};
-
-    Object.values(data).forEach(i=>{
-      const key = i.gmid + "|" + i.batch + "|" + (i.dest || "UNASSIGNED");
-
-      if(!summary[key]){
-        summary[key] = {
-          GMID: i.gmid,
-          Batch: i.batch,
-          Destination: i.dest || "UNASSIGNED",
-          Qty: 0,
-          Weight: 0
-        };
-      }
-
-      summary[key].Qty += 1;
-      summary[key].Weight += Number(i.weight || 0);
-    });
-
-    const rows = Object.values(summary).map(i=>({
-      GMID: i.GMID,
-      Batch: i.Batch,
-      Destination: i.Destination,
-      Qty: i.Qty,
-      Weight: Number(i.Weight.toFixed(3))
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(wb, ws, "Warehouse");
-    XLSX.writeFile(wb, "warehouse_export.xlsx");
-  }).catch(err=>{
-    playError("EXPORT FAILED");
-    console.log(err);
+    mb52Scans = Object.values(data);
+    renderMB52();
   });
 }
 
 function loadMB52(){
-  allowedBatches = {};
+  const text = document.getElementById("mb52Input").value;
+  const lines = text.split("\n");
 
-  const lines = document.getElementById("mb52Input").value.split("\n");
+  allowedBatches = {};
   let currentMaterial = "";
 
   lines.forEach(line=>{
-    const m = line.match(/\|(\d{11})\s+/);
+    const materialMatch = line.match(/\|(\d{11})\s+/);
 
-    if(m){
-      currentMaterial = m[1];
+    if(materialMatch){
+      currentMaterial = materialMatch[1];
       return;
     }
 
-    const b = line.match(/\|207N\s+([A-Z0-9]+)\s+([\d,\.]+)\s+KG\s+([\d,\.]+)\s+([\d,\.]+)/);
+    const batchMatch = line.match(/\|207N\s+([A-Z0-9]+)\s+([\d,\.]+)\s+KG\s+([\d,\.]+)\s+([\d,\.]+)/);
 
-    if(!b) return;
+    if(!batchMatch) return;
 
-    const unrestricted = parseFloat(b[2].replace(/,/g,'')) || 0;
-    const quality = parseFloat(b[3].replace(/,/g,'')) || 0;
-    const blocked = parseFloat(b[4].replace(/,/g,'')) || 0;
+    const batch = batchMatch[1];
+    const unrestricted = parseFloat(batchMatch[2].replace(/,/g,"")) || 0;
+    const quality = parseFloat(batchMatch[3].replace(/,/g,"")) || 0;
+    const blocked = parseFloat(batchMatch[4].replace(/,/g,"")) || 0;
 
     let status = "NONE";
 
@@ -523,68 +563,60 @@ function loadMB52(){
     else if(unrestricted > 0) status = "UNRESTRICTED";
     else if(quality > 0) status = "QUALITY";
 
-    allowedBatches[b[1]] = {
-      material: currentMaterial,
-      status: status
+    allowedBatches[batch] = {
+      material:currentMaterial,
+      status:status
     };
   });
 
   db.ref("mb52").set(allowedBatches).then(()=>{
-    document.getElementById("mb52Count").innerText = Object.keys(allowedBatches).length;
-    document.getElementById("mb52Status").innerText = "MB52 Loaded & Synced";
-    document.getElementById("mb52Status").style.color = "#7ee787";
+    setStatus("mb52Status","MB52 Loaded & Synced");
   }).catch(err=>{
-    playError("MB52 LOAD FAILED");
     console.log(err);
+    playError("MB52 LOAD FAILED");
   });
 }
 
 function scanMB52(raw){
-  const parsed = parseBarcode(raw);
-  const g = parsed.gmid;
-  const b = parsed.batch;
-  const w = parsed.weight;
+  const p = parseBarcode(raw);
 
-  if(!g || !b || !w){
+  if(!p.gmid || !p.batch || !p.weight){
     playError("INVALID BARCODE");
     return;
   }
 
-  if(!allowedBatches[b]){
+  if(!allowedBatches[p.batch]){
     playError("BATCH NOT IN MB52");
     return;
   }
 
-  if(allowedBatches[b].status === "BLOCKED"){
+  const batchInfo = allowedBatches[p.batch];
+
+  if(batchInfo.status === "BLOCKED"){
     playError("BLOCKED INVENTORY");
     return;
   }
 
-  if(
-    document.getElementById("mb52Mode").value === "UNRESTRICTED" &&
-    allowedBatches[b].status === "QUALITY"
-  ){
+  if(document.getElementById("mb52Mode").value === "UNRESTRICTED" && batchInfo.status === "QUALITY"){
     playError("QUALITY STOCK NOT ALLOWED");
     return;
   }
 
   db.ref("mb52Scans").push({
-    gmid:g,
-    batch:b,
-    status:allowedBatches[b].status,
-    weight:w,
+    gmid:p.gmid,
+    batch:p.batch,
+    status:batchInfo.status,
+    weight:p.weight,
     time:Date.now()
   }).then(()=>{
-    document.getElementById("mb52Status").innerText = "MB52 scan added";
-    document.getElementById("mb52Status").style.color = "#7ee787";
-
-    successBeep.currentTime = 0;
-    successBeep.play();
+    playSuccess();
+    setStatus("mb52Status","MB52 scan added");
   }).catch(err=>{
-    playError("MB52 SCAN FAILED");
     console.log(err);
+    playError("MB52 SCAN FAILED");
   });
 }
+
 function renderMB52(){
   const t = document.getElementById("mb52Table");
   t.innerHTML = "";
@@ -592,42 +624,65 @@ function renderMB52(){
   const summary = {};
 
   mb52Scans.forEach(i=>{
-    const key = i.gmid + "|" + i.batch + "|" + i.status;
+    const key = `${i.gmid}|${i.batch}|${i.status}`;
 
     if(!summary[key]){
       summary[key] = {
-        gmid: i.gmid,
-        batch: i.batch,
-        status: i.status,
-        qty: 0,
-        weight: 0
+        gmid:i.gmid,
+        batch:i.batch,
+        status:i.status,
+        qty:0,
+        weight:0
       };
     }
 
-    summary[key].qty += 1;
+    summary[key].qty++;
     summary[key].weight += Number(i.weight || 0);
   });
 
   document.getElementById("mb52ScanCount").innerText = mb52Scans.length;
 
-  Object.values(summary).forEach(i=>{
-    const r = t.insertRow();
-
-    r.insertCell(0).innerText = i.gmid;
-    r.insertCell(1).innerText = i.batch;
-    r.insertCell(2).innerText = i.status;
-    r.insertCell(3).innerText = i.qty;
-    r.insertCell(4).innerText = i.weight.toFixed(3);
-  });
+  Object.values(summary)
+    .sort((a,b)=>a.batch.localeCompare(b.batch) || a.gmid.localeCompare(b.gmid))
+    .forEach(i=>{
+      const r = t.insertRow();
+      r.insertCell(0).innerText = i.gmid;
+      r.insertCell(1).innerText = i.batch;
+      r.insertCell(2).innerText = i.status;
+      r.insertCell(3).innerText = i.qty;
+      r.insertCell(4).innerText = i.weight.toFixed(3);
+    });
 }
 
 function exportMB52(){
-  const rows = mb52Scans.map(i=>({
-    GMID: i.gmid,
-    Batch: i.batch,
-    Status: i.status,
-    Weight: Number(Number(i.weight || 0).toFixed(3))
-  }));
+  const summary = {};
+
+  mb52Scans.forEach(i=>{
+    const key = `${i.gmid}|${i.batch}|${i.status}`;
+
+    if(!summary[key]){
+      summary[key] = {
+        GMID:i.gmid,
+        Batch:i.batch,
+        Status:i.status,
+        Qty:0,
+        Weight:0
+      };
+    }
+
+    summary[key].Qty++;
+    summary[key].Weight += Number(i.weight || 0);
+  });
+
+  const rows = Object.values(summary)
+    .sort((a,b)=>a.Batch.localeCompare(b.Batch) || a.GMID.localeCompare(b.GMID))
+    .map(i=>({
+      GMID:i.GMID,
+      Batch:i.Batch,
+      Status:i.Status,
+      Qty:i.Qty,
+      Weight:Number(i.Weight.toFixed(3))
+    }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -640,29 +695,21 @@ function resetMB52(){
   if(!confirm("Clear MB52 scanned records for ALL scanners?")) return;
 
   db.ref("mb52Scans").remove().then(()=>{
-    mb52Scans = [];
-    renderMB52();
-
-    document.getElementById("mb52Status").innerText = "MB52 scans cleared";
-    document.getElementById("mb52Status").style.color = "#7ee787";
+    setStatus("mb52Status","MB52 scans cleared");
   }).catch(err=>{
-    playError("MB52 RESET FAILED");
     console.log(err);
+    playError("MB52 RESET FAILED");
   });
 }
 
 function clearMB52(){
-  if(!confirm("Clear MB52 list for ALL scanners?")) return;
+  if(!confirm("Clear MB52 loaded batch list for ALL scanners?")) return;
 
   db.ref("mb52").remove().then(()=>{
-    allowedBatches = {};
-    document.getElementById("mb52Count").innerText = "0";
-
-    document.getElementById("mb52Status").innerText = "MB52 list cleared";
-    document.getElementById("mb52Status").style.color = "#7ee787";
+    setStatus("mb52Status","MB52 list cleared");
   }).catch(err=>{
-    playError("MB52 CLEAR FAILED");
     console.log(err);
+    playError("MB52 CLEAR FAILED");
   });
 }
 
