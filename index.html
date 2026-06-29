@@ -172,37 +172,23 @@ const db = firebase.database();
 
 /* SOUND */
 /* SOUND */
-const successBeep = new Audio("./Beep.mp3");
-const errorBeep = new Audio("./ErrorBeep.mp3");
+/* SOUND */
+const successBeep = new Audio("Beep.mp3");
+const errorBeep = new Audio("ErrorBeep.mp3");
 
 successBeep.preload = "auto";
 errorBeep.preload = "auto";
 
-successBeep.load();
-errorBeep.load();
-
-function playSound(audio){
-  audio.pause();
-  audio.currentTime = 0;
-
-  audio.play().catch(err=>{
-    console.log("Sound failed:", err);
-
-    audio.load();
-
-    setTimeout(()=>{
-      audio.currentTime = 0;
-      audio.play().catch(e=>console.log("Retry failed:", e));
-    },50);
-  });
-}
-
 function playSuccess(){
-  playSound(successBeep);
+  successBeep.pause();
+  successBeep.currentTime = 0;
+  successBeep.play();
 }
 
 function playErrorSound(){
-  playSound(errorBeep);
+  errorBeep.pause();
+  errorBeep.currentTime = 0;
+  errorBeep.play();
 }
 
 /* STATE */
