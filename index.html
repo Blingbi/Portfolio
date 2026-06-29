@@ -354,7 +354,20 @@ function scan(s){
   successBeep.currentTime = 0;
   successBeep.play().catch(()=>{});
 }
+function unlockAudio(){
+  successBeep.play().then(()=>{
+    successBeep.pause();
+    successBeep.currentTime = 0;
+  }).catch(()=>{});
 
+  errorBeep.play().then(()=>{
+    errorBeep.pause();
+    errorBeep.currentTime = 0;
+  }).catch(()=>{});
+}
+
+document.addEventListener("click", unlockAudio, { once:true });
+document.addEventListener("touchstart", unlockAudio, { once:true });
 function render(sum){
   const t = document.getElementById("table");
   t.innerHTML = "";
