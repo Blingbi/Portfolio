@@ -171,7 +171,7 @@ let mb52Scans = [];
 
 function playError(msg){
   errorBeep.currentTime = 0;
-  errorBeep.play().catch(()=>{});
+  errorBeep.play();
 
   const mainStatus = document.getElementById("status");
   const mb52Status = document.getElementById("mb52Status");
@@ -579,7 +579,7 @@ function scanMB52(raw){
     document.getElementById("mb52Status").style.color = "#7ee787";
 
     successBeep.currentTime = 0;
-    successBeep.play().catch(()=>{});
+    successBeep.play();
   }).catch(err=>{
     playError("MB52 SCAN FAILED");
     console.log(err);
