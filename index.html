@@ -136,7 +136,7 @@ textarea{box-sizing:border-box;}
 
 <table>
 <thead>
-<tr><th>GMID</th><th>Batch</th><th>Status</th><th>Weight</th></tr>
+<tr><th>GMID</th><th>Batch</th><th>Status</th><th>Qty</th><th>Total Weight</th></tr>
 </thead>
 <tbody id="mb52Table"></tbody>
 </table>
@@ -572,19 +572,39 @@ function scanMB52(raw){
     console.log(err);
   });
 }
-
 function renderMB52(){
   const t = document.getElementById("mb52Table");
   t.innerHTML = "";
 
-  document.getElementById("mb52ScanCount").innerText = mb52Scans.length;
+  const summary = {};
 
   mb52Scans.forEach(i=>{
+    const key = i.gmid + "|" + i.batch + "|" + i.status;
+
+    if(!summary[key]){
+      summary[key] = {
+        gmid: i.gmid,
+        batch: i.batch,
+        status: i.status,
+        qty: 0,
+        weight: 0
+      };
+    }
+
+    summary[key].qty += 1;
+    summary[key].weight += Number(i.weight || 0);
+  });
+
+  document.getElementById("mb52ScanCount").innerText = mb52Scans.length;
+
+  Object.values(summary).forEach(i=>{
     const r = t.insertRow();
+
     r.insertCell(0).innerText = i.gmid;
     r.insertCell(1).innerText = i.batch;
     r.insertCell(2).innerText = i.status;
-    r.insertCell(3).innerText = Number(i.weight || 0).toFixed(3);
+    r.insertCell(3).innerText = i.qty;
+    r.insertCell(4).innerText = i.weight.toFixed(3);
   });
 }
 
